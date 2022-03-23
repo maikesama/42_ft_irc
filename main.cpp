@@ -15,7 +15,7 @@ int firstcheck(Server serv, char **argv)
 {
 	int	pn;
 
-	if (isNum(argv[1]) && (pn = atoi(argv[1])) > 0 && pn < 65535)
+	if (isNum(argv[1]) && (pn = atoi(argv[1])) > 1023 && pn < 65535)
 		serv.setPort(pn);
 	else
 	{
@@ -39,83 +39,98 @@ int	main(int argc, char **argv)
 	if (argc != 3)
 	{
 		std::cout << "Program need to be runned as follows : ./ircserv <port> <password>" << std::endl;
-		return 1;
+		exit(1);
 	}
 
 	Server	serv;
 
 	if (firstcheck(serv, argv) == 1)
-		return 1;
-
+		exit(1);
 	//Create the socket
 	int	listeningSock = socket(AF_INET, SOCK_STREAM, 0);
 	if (listeningSock == -1)
 	{
 		std::cout << "Can't create a socket. Quitting." << std::endl;
-		return 1;
+		exit(1);
 	}
 
 	//Bind an ip and a port to the socket
-	sockaddr_in hint;
-	hint.sin_family = AF_INET;
-	hint.sin_port = htons(serv.getPort());
-	hint.sin_addr.s_addr = INADDR_ANY; //need to use inet_addr or inet_aton but idk how to have the ip address of the machine :/
+	sockaddr_in serv_addr, client_addr;
+	bzero((char *)&serv_addr, sizeof(serv_addr));
+	serv_addr.sin_family = AF_INET;
+	serv_addr.sin_port = htons(serv.getPort());
+	serv_addr.sin_addr.s_addr = INADDR_ANY; //need to use inet_addr or inet_aton but idk how to have the ip address of the machine :/
 
-	bind(listeningSock, (sockaddr*)&hint, sizeof(hint));
+	if (bind(listeningSock, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) < 0)
+	{
+		std::cout << "Error bindind the socket" << std::endl;
+		exit(1);
+	}
 
 	//Tell that the socket is for listening
 	listen(listeningSock, SOMAXCONN);
+	int client_len = sizeof(client_addr); 
 
-	fd_set master;
 
-	FD_ZERO(&master);
+	int kq = kqueue();
+	struct kevent change_event[4],
+        		event[4];
 
-	FD_SET(listeningSock, &master);
+	EV_SET(change_event, listeningSock, EVFILT_READ, EV_ADD | EV_ENABLE, 0, 0, 0);
+
+	if (kevent(kq, change_event, 1, NULL, 0, NULL) == -1)
+	{
+		perror("kevent");
+		exit(1);
+	}		
+
+	int new_events = 0, socket_connection_fd;
+		std::cout << "dio" << std::endl;
 
 	while (1)
-	{
-		fd_set copy = master;
+	{		std::cout << "dio" << std::endl;
 
-		int socketCount = select(0, &copy, NULL, NULL, NULL);
-
-		for (int i = 0; i < socketCount; i++)
+		new_events = kevent(kq, NULL, 0, event, 1, NULL);
+		std::cout << "dio" << std::endl;
+		
+		if ( new_events == -1)
 		{
-			int sock = copy.fd_array[i];
-			if (sock == listeningSock)
+			perror("kevents");
+			exit(1);
+		}
+
+		for(int i = 0; new_events > i; i++)
+		{
+			int event_fd = event[i].ident;
+
+			if (event[i].flags & EV_EOF)
 			{
-				//Accept and add the new connection to the list of connected clients
-				int	client = accept(listeningSock, NULL, NULL);
-				FD_SET(client, &master);
-				std::string WelcomeMsg = "You're now connected and ready to talk!";
-				send(client, WelcomeMsg.c_str(), WelcomeMsg.size() + 1, 0);
+				std::cout << "Client has disconnected" <<std::endl;
+				close(event_fd);
 			}
-			else
+
+			else if (event_fd == listeningSock)
 			{
-				char	buf[4096];
+				socket_connection_fd = accept(event_fd, (struct sockaddr*)&client_addr, (socklen_t *)&client_len);
 
-				memset(buf, 0, 4096);
-				//Accept and send new message to the other clients
-				int bytesIn = recv(sock, buf, 4096, 0);
-				if (bytesIn <= 0)
-				{
-					// Drop the client
-					close(sock);
-					FD_CLR(sock, &master);
-				}
-				else
-				{
-					for (int i = 0; i < socketCount; i++)
-					{
-						int outSock = master.fd_array[i];
-						if (outSock != listeningSock && outSock != sock)
-						{
-							send(outSock, buf, 4096, 0);
-						}
+				if (socket_connection_fd == -1)
+					perror("Accept socket error");
 
-					}
-				}
+				std::cout << "New connection accepted" << std::endl;
+
+				EV_SET(change_event, socket_connection_fd, EVFILT_READ, EV_ADD, 0, 0, NULL);
+				if (kevent(kq, change_event, 1, NULL, 0, NULL) < 0)
+					perror("kevent error");
+			}
+
+			else if (event[i].filter & EVFILT_READ)
+			{
+				char buf[4096];
+				size_t bytes_read = recv(event_fd, buf, sizeof(buf), 0);
+				std::cout << buf << std::endl;
 			}
 		}
 	}
 
+	return 0;
 }

@@ -9,5 +9,11 @@
 #include <arpa/inet.h>
 #include <sys/select.h>
 #include <unistd.h>
+#include <sys/types.h>
+#include <sys/event.h>
+#include <sys/time.h>
 
 #endif
+
+//NONBLOCKING che vuol di
+//channell
