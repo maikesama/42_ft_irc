@@ -15,8 +15,11 @@
 #include <fcntl.h>
 #include <sstream>
 #include <netdb.h>
+#include <vector>
+#include <algorithm>
+#include <iostream>
+#include <cstdlib>
+
+
 
 #endif
-
-//NONBLOCKING che vuol di
-//channell
