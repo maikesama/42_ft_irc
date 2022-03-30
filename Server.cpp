@@ -26,7 +26,6 @@ void    Server::launch()
 
 	//Tell that the socket is for listening
 	listen(listeningSock, SOMAXCONN);
-
 	fcntl(listeningSock, F_SETFL, O_NONBLOCK);
 
 	int client_len = sizeof(client_addr); 
@@ -49,9 +48,7 @@ void    Server::launch()
 	while (1)
 	{
 
-		new_events = kevent(kq, NULL, 0, event, 1, NULL);
-	
-		if ( new_events == -1)
+		if ((new_events = kevent(kq, NULL, 0, event, 1, NULL)) == -1)
 		{
 			perror("kevents");
 			exit(1);
@@ -62,11 +59,8 @@ void    Server::launch()
 			int event_fd = event[i].ident;
 
 			if (event[i].flags & EV_EOF)
-			{
-				std::cout << "Client has disconnected" <<std::endl;
-				close(event_fd);
-			}
-
+				closeClientConnection(event_fd);
+				
 			else if (event_fd == listeningSock)
 			{
 				socket_connection_fd = accept(listeningSock, (struct sockaddr*)&client_addr, (socklen_t *)&client_len);
@@ -87,12 +81,19 @@ void    Server::launch()
 
 			else if (change_event[i].filter & EVFILT_READ)
 			{
-                    char buf[4096];
-                    bzero(buf, 4096);
-                    recv (event_fd, buf, 4096, 0);
-					if (getClientRegistrationStatus(event_fd) == false)
+					char buf[4096];
+					bzero(buf, 4096);
+					recv (event_fd, buf, 4096, 0);
+					std::cout << buf << std::endl;
+					Client c(findClient(event_fd));
+
+					if (c.getIsRegistered() == false)
 					{
-						send(event_fd, "451 : not registered\r\n", 24, 0);
+						if (c.getFirst() == false)
+						{
+							send(event_fd, "451 : not registered\r\n", 24, 0);
+							c.setFirst();
+						}
 						char *tok;
 						tok = strtok(buf, " :\r\n");
 						while (tok != NULL)
@@ -114,24 +115,54 @@ void    Server::launch()
 							else if (!tmp.compare("NICK"))
 							{
 								tok = strtok(NULL, " :\r\n");
-                                _cVec.back().setNick(std::string(tok));
+                                c.setNick(std::string(tok));
 							}
                             else if (!tmp.compare("USER"))
                             {
                                 tok = strtok(NULL, " :\r\n");
-                                _cVec.back().setUsername(std::string(tok));
+                                c.setUsername(std::string(tok));
                             }
-                            else if (!tmp.compare(0, 3, "1,8"))
+                            else if (!tmp.compare(0, 3, "1,8")) //its not 1,8 in every case
                             {
-                                _cVec.back().setRealName(std::string(tok).substr(3, std::string(tok).size() - 3));
+                                c.setRealName(std::string(tok).substr(3, std::string(tok).size() - 3));
                             }
 							tok = strtok(NULL, " :\r\n");
 						}
                         // do it bettefr with nick eccc..
-                        send(event_fd, "001 : Welcome\r\n", 17, 0);
-                        _cVec.back().setIsRegistered(true);
+						if (c.getNick().size() && c.getUsername().size())
+						{
+							std::ostringstream RPL;
+							RPL << "001 : Welcome to the 42IRC Network, " << c.getNick() <<"[!"<<c.getUsername()<<"@"<<c.getHostAddress()<<"]\r\n";
+							send(event_fd, RPL.str().c_str(), RPL.str().size(), 0);
+							// send(event_fd, "002 : your host is 42IRC\r\n", 27, 0);
+							// std::cout << c.getNick() << std::endl;
+							// send(event_fd, "003 : this server was created <timestamp>\r\n", 46, 0);
+							// send(event_fd, "004 : server info\r\n", 22, 0);
+							// send(event_fd, "005 : tokens are supported\r\n", 33, 0);
+							send(event_fd, "002 : your host is 42IRC\r\n 003 : this server was created <timestamp>\r\n 004 : server info\r\n 005 : tokens are supported\r\n", 120, 0);
+							c.setIsRegistered(true);
+						}
 					}
 			}
 		}
 	}
+}
+
+void	Server::closeClientConnection(int fd)
+{
+	std::cout << "Client has disconnected" <<std::endl;
+	close(fd);
+}
+
+const Client & Server::findClient(int fd) const
+{
+	Client *c;
+
+	for (std::vector<Client*>::const_iterator _cIt = _cVec.begin(); _cIt != _cVec.end(); _cIt++)
+	{
+		c = *_cIt;
+		if (c->getFd() == fd)
+			return *c;
+	}
+	return *c;
 }

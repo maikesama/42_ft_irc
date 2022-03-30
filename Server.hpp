@@ -6,6 +6,7 @@
 #include "main.hpp"
 #include <vector>
 
+
 class Client;
 
 class Server
@@ -30,16 +31,15 @@ class Server
 		void	addClient(int fd, std::string Host)
 		{
 			Client *c = new Client(fd, Host);
-			_cVec.push_back(*c);
+			_cVec.push_back(c);
 		}
 
 		bool getClientRegistrationStatus(int fd) const { 
-			for (std::vector<Client>::const_iterator _cIt = _cVec.begin(); _cIt != _cVec.end(); _cIt++)
+			for (std::vector<Client*>::const_iterator _cIt = _cVec.begin(); _cIt != _cVec.end(); _cIt++)
 			{
-				Client 
-				c = *_cIt;
-				if (c.getFd() == fd)
-					return c.getIsRegistered();
+				Client *c = *_cIt;
+				if (c->getFd() == fd)
+					return c->getIsRegistered();
 			}
 			return false;
 		}
@@ -49,13 +49,15 @@ class Server
 
 		// Anything else in the Server.cpp file
 
-		void	launch(); 
+		void	launch();
+		const Client & findClient(int fd) const;
+		void	closeClientConnection(int fd);
 
 
 	private :
 		int	port;
 		std::string Password;
-		std::vector<Client> _cVec;
+		std::vector<Client*> _cVec;
 		
 };
 
