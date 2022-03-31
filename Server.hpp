@@ -3,8 +3,10 @@
 
 
 #include "Client.hpp"
+#include "Commands.hpp"
 #include "main.hpp"
 #include <vector>
+#include <ctime>
 
 
 class Client;
@@ -20,6 +22,18 @@ class Server
 		{
 			port = pn;
 		};
+
+		void	setCreationTime()
+		{
+			const std::time_t   t = std::time(nullptr);
+			char            str[80];
+			bzero(str, 80);
+
+			if (std::strftime(str, 80, "%c", std::localtime(&t)))
+				CreationTime = std::string(str);
+		}
+
+		const std::string & getCreationTime() const { return CreationTime; }
 
 		const int & getPort(void) const { return this->port; };
 
@@ -44,20 +58,42 @@ class Server
 			return false;
 		}
 
+		const std::string    _displayTimestamp( void )
+		{
+			const std::time_t   t = std::time(nullptr);
+			char            str[80];
+			bzero(str, 80);
+
+			if (std::strftime(str, 80, "%T", std::localtime(&t)) == 0)
+				return "Error.";
+			return std::string(str);
+		}
+
 		const std::string & getPassword(void) const { return this->Password; };
 
 
 		// Anything else in the Server.cpp file
 
 		void	launch();
-		const Client & findClient(int fd) const;
+
+		Client & findClient(int fd) const;
 		void	closeClientConnection(int fd);
 
+		//check login information
+		int		checkNick(std::string nick, int fd);
+		int		checkUser(std::string user, int fd);
+
+		void	login(Client *c, int event_fd, std::vector<std::string> v);
+		void	Replyer(int cmd, Client *c, std::vector<std::string> v);
+		void	MessageHandler(std::vector<std::string> v, Client *c, int fd);
 
 	private :
 		int	port;
 		std::string Password;
 		std::vector<Client*> _cVec;
+
+
+		std::string	CreationTime;
 		
 };
 

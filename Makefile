@@ -1,6 +1,6 @@
 NAME = ircserv
 
-CC = g++ -Wall -Werror -Wextra -std=c++98
+CC = g++ -Wall -Werror -Wextra -std=c++98 #-fsanitize=address
 
 SRCS = main.cpp Server.cpp\
 

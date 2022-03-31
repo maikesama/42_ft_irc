@@ -36,6 +36,22 @@ int firstcheck(Server *serv, char **argv)
 	return 0;
 }
 
+const std::vector<std::string> ft_split(char *str, const char *ctos)
+{
+	std::vector<std::string> v;
+	char *tok;
+	tok = strtok(str, ctos);
+	v.push_back(std::string(tok));
+	while (tok != NULL)
+	{
+		tok = strtok(NULL, ctos);
+		if (tok == NULL)
+			break;
+		v.push_back(std::string(tok));
+	}
+	return (v);
+}
+
 int	main(int argc, char **argv)
 {
 	if (argc != 3)
@@ -49,6 +65,7 @@ int	main(int argc, char **argv)
 	if (firstcheck(&serv, argv) == 1)
 		exit(1);
 	
+	serv.setCreationTime();
 	serv.launch();
 
 }

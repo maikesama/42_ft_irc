@@ -31,130 +31,199 @@ void    Server::launch()
 	int client_len = sizeof(client_addr); 
 
 
-	int kq = kqueue();
-	struct kevent change_event[SOMAXCONN],
-        		event[SOMAXCONN];
+	fd_set currentSockets, readySockets;
 
-	EV_SET(change_event, listeningSock, EVFILT_READ, EV_ADD | EV_ENABLE, 0, 0, 0);
+	FD_ZERO(&currentSockets);
+	FD_SET(listeningSock, &currentSockets);	
 
-	if (kevent(kq, change_event, 1, NULL, 0, NULL) == -1)
-	{
-		perror("kevent");
-		exit(1);
-	}		
-
-	int new_events = 0, socket_connection_fd;
+	int maxfds = listeningSock, socket_connection_fd;
 
 	while (1)
 	{
+		readySockets = currentSockets;
 
-		if ((new_events = kevent(kq, NULL, 0, event, 1, NULL)) == -1)
+		if (select(FD_SETSIZE, &readySockets, NULL, NULL, NULL) < 0)
 		{
-			perror("kevents");
+			perror("select error");
 			exit(1);
 		}
 
-		for(int i = 0; new_events > i; i++)
+		for (int i = 0; i <= maxfds; i++)
 		{
-			int event_fd = event[i].ident;
-
-			if (event[i].flags & EV_EOF)
-				closeClientConnection(event_fd);
-				
-			else if (event_fd == listeningSock)
+			if (FD_ISSET(i, &readySockets))
 			{
-				socket_connection_fd = accept(listeningSock, (struct sockaddr*)&client_addr, (socklen_t *)&client_len);
-				fcntl(socket_connection_fd, F_SETFL, O_NONBLOCK);
-				if (socket_connection_fd == -1)
-					perror("Accept socket error");
-				
-				char host[4096];
-				getnameinfo((sockaddr *)&client_addr, client_len, host, 4096, NULL, 0, NI_NAMEREQD);
-				addClient(socket_connection_fd, std::string(host));
+				if (i == listeningSock)
+				{
+					socket_connection_fd = accept(listeningSock, (struct sockaddr*)&client_addr, (socklen_t *)&client_len);
+					fcntl(socket_connection_fd, F_SETFL, O_NONBLOCK);
+					if (socket_connection_fd == -1)
+						perror("Accept socket error");
+					
+					char host[4096];
+					getnameinfo((sockaddr *)&client_addr, client_len, host, 4096, NULL, 0, NI_NAMEREQD);
+					addClient(socket_connection_fd, std::string(host));
 
-				std::cout << "New connection accepted" << std::endl;
+					maxfds = maxfds > socket_connection_fd ? maxfds : socket_connection_fd;
 
-				EV_SET(change_event, socket_connection_fd, EVFILT_READ, EV_ADD, 0, 0, NULL);
-				if (kevent(kq, change_event, 1, NULL, 0, NULL) < 0)
-					perror("kevent error");
-			}
+					FD_SET(socket_connection_fd, &currentSockets);
 
-			else if (change_event[i].filter & EVFILT_READ)
-			{
+					std::cout << "New connection accepted" << std::endl;
+				}
+				else
+				{
 					char buf[4096];
 					bzero(buf, 4096);
-					recv (event_fd, buf, 4096, 0);
+					int bytes_read = recv (i, buf, 4096, 0);
 					std::cout << buf << std::endl;
-					Client c(findClient(event_fd));
-
-					if (c.getIsRegistered() == false)
+					
+					if (bytes_read <= 0)
 					{
-						if (c.getFirst() == false)
-						{
-							send(event_fd, "451 : not registered\r\n", 24, 0);
-							c.setFirst();
-						}
-						char *tok;
-						tok = strtok(buf, " :\r\n");
-						while (tok != NULL)
-						{
-							std::string tmp = std::string(tok);
-
-							if (!tmp.compare("PASS"))
-							{
-								tok = strtok(NULL, " :\r\n");
-								if (getPassword().compare(std::string(tok)) != 0)
-								{
-									send(event_fd, "464 : Password incorrect\r\n", 28, 0);
-									close(event_fd);
-                                    _cVec.pop_back();
-									break ;
-								}
-							}
-                            // Check parameters
-							else if (!tmp.compare("NICK"))
-							{
-								tok = strtok(NULL, " :\r\n");
-                                c.setNick(std::string(tok));
-							}
-                            else if (!tmp.compare("USER"))
-                            {
-                                tok = strtok(NULL, " :\r\n");
-                                c.setUsername(std::string(tok));
-                            }
-                            else if (!tmp.compare(0, 3, "1,8")) //its not 1,8 in every case
-                            {
-                                c.setRealName(std::string(tok).substr(3, std::string(tok).size() - 3));
-                            }
-							tok = strtok(NULL, " :\r\n");
-						}
-                        // do it bettefr with nick eccc..
-						if (c.getNick().size() && c.getUsername().size())
-						{
-							std::ostringstream RPL;
-							RPL << "001 : Welcome to the 42IRC Network, " << c.getNick() <<"[!"<<c.getUsername()<<"@"<<c.getHostAddress()<<"]\r\n";
-							send(event_fd, RPL.str().c_str(), RPL.str().size(), 0);
-							// send(event_fd, "002 : your host is 42IRC\r\n", 27, 0);
-							// std::cout << c.getNick() << std::endl;
-							// send(event_fd, "003 : this server was created <timestamp>\r\n", 46, 0);
-							// send(event_fd, "004 : server info\r\n", 22, 0);
-							// send(event_fd, "005 : tokens are supported\r\n", 33, 0);
-							send(event_fd, "002 : your host is 42IRC\r\n 003 : this server was created <timestamp>\r\n 004 : server info\r\n 005 : tokens are supported\r\n", 120, 0);
-							c.setIsRegistered(true);
-						}
+						closeClientConnection(i);
+						FD_CLR(i, &currentSockets);
 					}
+					else
+					{
+						Client *c(&findClient(i));
+
+						std::vector<std::string> v = ft_split(buf, " :\r\n");
+
+						if (c->getIsRegistered() == false)
+							login(c, i, v);
+						else if (c->getIsRegistered() == true)
+								MessageHandler(v, c, i);
+					}
+				}
 			}
 		}
 	}
 }
 
+void	Server::MessageHandler(std::vector<std::string> v, Client *c, int fd)
+{
+	if (v[0].compare("PING"))
+		Replyer(PING, c, v);
+}
+
+void	Server::Replyer(int cmd, Client *c, std::vector<std::string> v)
+{
+	switch(cmd)
+	{
+		case 1 : send(c->getFd(), "PONG 42IRC Welcome to the 42IRC Network, kok[!sdxa@localhost] 42IRC\r\n ", 74, 0);
+	}
+}
+
+void	Server::login(Client *c, int event_fd, std::vector<std::string> v)
+{
+	if (c->getFirst() == false)
+	{
+		send(event_fd, "451 : not registered\r\n ", 24, 0);
+		c->setFirst();
+	}
+	
+	for (std::vector<std::string>::iterator it = v.begin(); it != v.end(); it++)
+	{
+		if (!it->compare("PASS"))
+		{
+			it++;
+			if (getPassword().compare(*it) != 0)
+			{
+				send(event_fd, "464 : Password incorrect\r\n ", 28, 0);
+				close(event_fd);
+				_cVec.pop_back();
+				break ;
+			}
+		}
+		else if (!it->compare("NICK"))
+		{
+			it++;
+			if (checkNick(*it, event_fd))
+				c->setNick(*it);
+		}
+		else if (!it->compare("USER"))
+		{
+			it++;
+			if (checkUser(*it, event_fd) == 1)
+				c->setUsername(*it);
+			else if (checkUser(*it, event_fd) == 2)
+			{
+				std::string str = *it;
+				str.resize(12);
+				c->setUsername(str);
+			}	
+		}
+		//set RealName not explicitly required
+	}
+	if (c->getNick().size() && c->getUsername().size())
+	{
+		std::ostringstream RPL;
+		RPL << "001 : Welcome to the 42IRC Network, " << c->getNick() <<"[!"<<c->getUsername()<<"@"<<c->getHostAddress()<<"]\r\n "
+		<< "002 : Your host is 42IRC, running version 1.2\r\n 003 : This server was created " << getCreationTime() << "\r\n "
+		<< "004 x 42IRC 1.2 o boktmvnls\r\n "
+		<< "005\r\n ";
+		send(event_fd, RPL.str().c_str(), RPL.str().size(), 0);
+		c->setIsRegistered(true);
+	}
+}
+
+int		Server::checkUser(std::string user, int fd)
+{
+	if (user.size() <= 0)
+	{
+		send(fd, "461 USER : Not enough parameters\r\n ", 36, 0);
+		return 0;
+	}
+	else if (user.size() > 12)
+	{
+		return 2;
+	}
+	return 1;
+}
+
+int		Server::checkNick(std::string nick, int fd)
+{
+	if (nick.size() <= 0)
+	{
+		send(fd, "431 : No nickname given\r\n ", 27, 0);
+		return 0;
+	}
+	for (int i = 0; i < nick.size(); i++)
+	{
+		if (!isprint(nick[i]))
+		{
+			send(fd, "432 : Erroneous nickname\r\n ", 28, 0);
+			return 0;
+		}
+	}
+	for (std::vector<Client*>::iterator it = _cVec.begin(); it != _cVec.end(); it++)
+	{
+		Client *c = *it;
+		if (c->getFd() != fd && !c->getNick().compare(nick))
+		{
+			send(fd, "433 : Nickname already in use\r\n ", 33, 0);
+			return 0;
+		}
+	}
+	return 1;
+}
+
 void	Server::closeClientConnection(int fd)
 {
 	std::cout << "Client has disconnected" <<std::endl;
+	int i = 0;
+	for (std::vector<Client*>::iterator it = _cVec.begin(); it != _cVec.end(); it++)
+	{
+		if (_cVec[i]->getFd() == fd)
+		{
+			delete *it;
+			_cVec.erase(it);
+			break;
+		}
+		i++;
+	}
 	close(fd);
 }
 
-const Client & Server::findClient(int fd) const
+Client & Server::findClient(int fd) const
 {
 	Client *c;
 
