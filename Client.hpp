@@ -3,6 +3,7 @@
 
 #include "main.hpp"
 #include <iostream>
+#include <sstream>
 
 class Client 
 {
@@ -35,6 +36,16 @@ class Client
         const std::string & getRealName() const { return _Realname; };
         const std::string & getUsername() const { return _Username; };
         const std::string & getHostAddress() const { return _HostAddress; };
+        const std::string & getFullIdentifier() const { return _FullIdentifier; };
+
+
+        void    setFullIdentifier()
+        {
+            std::ostringstream ss;
+
+            ss << getNick() << "!" << getUsername() << "@" << getHostAddress();
+            _FullIdentifier = ss.str();
+        }
 
         void    setNick(const std::string & n) { _Nick = n; 
         //control isvalid
@@ -51,6 +62,8 @@ class Client
         std::string _Realname;
         std::string _Username;
         std::string _HostAddress;
+
+        std::string _FullIdentifier;
 
         bool        _isRegistered;
 

@@ -42,7 +42,7 @@ void    Server::launch()
 	{
 		readySockets = currentSockets;
 
-		if (select(FD_SETSIZE, &readySockets, NULL, NULL, NULL) < 0)
+		if (select(maxfds + 1, &readySockets, NULL, NULL, NULL) < 0)
 		{
 			perror("select error");
 			exit(1);
@@ -78,7 +78,7 @@ void    Server::launch()
 					
 					if (bytes_read <= 0)
 					{
-						closeClientConnection(i);
+						closeClientConnection(i, &currentSockets);
 						FD_CLR(i, &currentSockets);
 					}
 					else
@@ -90,7 +90,8 @@ void    Server::launch()
 						if (c->getIsRegistered() == false)
 							login(c, i, v);
 						else if (c->getIsRegistered() == true)
-								MessageHandler(v, c, i);
+							MessageHandler(v, c, i, &currentSockets);
+						v.clear();
 					}
 				}
 			}
@@ -98,27 +99,70 @@ void    Server::launch()
 	}
 }
 
-void	Server::MessageHandler(std::vector<std::string> v, Client *c, int fd)
+void	Server::MessageHandler(std::vector<std::string> v, Client *c, int fd, fd_set *currentsockets)
 {
-	if (v[0].compare("PING"))
-		Replyer(PING, c, v);
+	
+	if (!v[0].compare("PING"))
+		Replyer(PING, c, v, currentsockets);
+	else if (!v[0].compare("JOIN"))
+		Replyer(JOIN, c, v, currentsockets);
+	else if(!v[0].compare("QUIT"))
+		Replyer(QUIT, c, v, currentsockets);
 }
 
-void	Server::Replyer(int cmd, Client *c, std::vector<std::string> v)
+void	Server::Replyer(int cmd, Client *c, std::vector<std::string> v, fd_set *currentsockets)
 {
+	std::string ss;
+
 	switch(cmd)
 	{
-		case 1 : send(c->getFd(), "PONG 42IRC Welcome to the 42IRC Network, kok[!sdxa@localhost] 42IRC\r\n ", 74, 0);
+		case PING :
+			ss = "PONG 42IRC\r\n"; 
+			send(c->getFd(),ss.c_str() , ss.size(), 0);
+			break;
+		
+		case JOIN :
+
+			ss = ":" + c->getFullIdentifier() + " " + ReplyCreator(v, c, 0);
+			//ss.append(ReplyCreator(v, c, 0));
+			//ss.append("332 <client> <channel> :<topic> \r\n 353 <client> <symbol> <channel> :[prefix]<nick>{ [prefix]<nick>}\r\n 366 <client> <channel> :End of /NAMES list\r\n ");
+			// ss.append(" #pol : topic is not setted yet\r\n ");
+			send(c->getFd(), ss.c_str(), ss.size(), 0);
+			std::cout << ss <<ss.size()<< std::endl;
+			break;
+
+		case QUIT :
+			ss = "ERROR Closing link : " + c->getFullIdentifier() + " " + ReplyCreator(v, c, 1);
+			send(c->getFd(),ss.c_str() , ss.size(), 0);
+			closeClientConnection(c->getFd(), currentsockets);
+			break ;
+
+		default : break;
 	}
+}
+
+std::string Server::ReplyCreator(std::vector<std::string> v, Client *c, int i)
+{
+	std::string ss;
+	
+	for (std::vector<std::string>::iterator it = v.begin() + i; it != v.end(); it++)
+	{
+		if (it + 1 != v.end())
+			ss += *it + " ";
+		else
+			ss += *it;
+	}
+	ss += "\r\n";
+	return ss;
 }
 
 void	Server::login(Client *c, int event_fd, std::vector<std::string> v)
 {
-	if (c->getFirst() == false)
-	{
-		send(event_fd, "451 : not registered\r\n ", 24, 0);
-		c->setFirst();
-	}
+	// if (c->getFirst() == false)
+	// {
+	// 	send(event_fd, "451 : not registered\r\n ", 24, 0);
+	// 	c->setFirst();
+	// }
 	
 	for (std::vector<std::string>::iterator it = v.begin(); it != v.end(); it++)
 	{
@@ -155,11 +199,11 @@ void	Server::login(Client *c, int event_fd, std::vector<std::string> v)
 	}
 	if (c->getNick().size() && c->getUsername().size())
 	{
+		c->setFullIdentifier();
 		std::ostringstream RPL;
-		RPL << "001 : Welcome to the 42IRC Network, " << c->getNick() <<"[!"<<c->getUsername()<<"@"<<c->getHostAddress()<<"]\r\n "
-		<< "002 : Your host is 42IRC, running version 1.2\r\n 003 : This server was created " << getCreationTime() << "\r\n "
-		<< "004 x 42IRC 1.2 o boktmvnls\r\n "
-		<< "005\r\n ";
+		RPL << "001 : Welcome to the 42IRC Network, " << c->getNick() <<"!"<<c->getUsername()<<"@"<<c->getHostAddress()<<"\r\n"
+		<< "002 : Your host is 42IRC, running version 1.2\r\n003 : This server was created " << getCreationTime() << "\r\n"
+		<< "004 " << c->getFullIdentifier() << " 42IRC 1.2 o boktmvnls\r\n";
 		send(event_fd, RPL.str().c_str(), RPL.str().size(), 0);
 		c->setIsRegistered(true);
 	}
@@ -169,7 +213,7 @@ int		Server::checkUser(std::string user, int fd)
 {
 	if (user.size() <= 0)
 	{
-		send(fd, "461 USER : Not enough parameters\r\n ", 36, 0);
+		send(fd, "461 USER : Not enough parameters\r\n", 35, 0);
 		return 0;
 	}
 	else if (user.size() > 12)
@@ -183,14 +227,14 @@ int		Server::checkNick(std::string nick, int fd)
 {
 	if (nick.size() <= 0)
 	{
-		send(fd, "431 : No nickname given\r\n ", 27, 0);
+		send(fd, "431 : No nickname given\r\n", 26, 0);
 		return 0;
 	}
 	for (int i = 0; i < nick.size(); i++)
 	{
 		if (!isprint(nick[i]))
 		{
-			send(fd, "432 : Erroneous nickname\r\n ", 28, 0);
+			send(fd, "432 : Erroneous nickname\r\n", 27, 0);
 			return 0;
 		}
 	}
@@ -199,14 +243,14 @@ int		Server::checkNick(std::string nick, int fd)
 		Client *c = *it;
 		if (c->getFd() != fd && !c->getNick().compare(nick))
 		{
-			send(fd, "433 : Nickname already in use\r\n ", 33, 0);
+			send(fd, "433 : Nickname already in use\r\n", 32, 0);
 			return 0;
 		}
 	}
 	return 1;
 }
 
-void	Server::closeClientConnection(int fd)
+void	Server::closeClientConnection(int fd, fd_set *currentsocket)
 {
 	std::cout << "Client has disconnected" <<std::endl;
 	int i = 0;
@@ -221,6 +265,7 @@ void	Server::closeClientConnection(int fd)
 		i++;
 	}
 	close(fd);
+	FD_CLR(fd, currentsocket);
 }
 
 Client & Server::findClient(int fd) const

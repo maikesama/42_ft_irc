@@ -3,6 +3,8 @@
 
 enum ecommands{
 	PING,
+	JOIN,
+	QUIT,
 	
 };
 
