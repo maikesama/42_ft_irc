@@ -3,6 +3,7 @@
 
 
 #include "Client.hpp"
+#include "Channel.hpp"
 #include "Commands.hpp"
 #include "main.hpp"
 #include <vector>
@@ -92,6 +93,7 @@ class Server
 		int	port;
 		std::string Password;
 		std::vector<Client*> _cVec;
+		std::vector<Channel*> _chV;
 
 
 		std::string	CreationTime;

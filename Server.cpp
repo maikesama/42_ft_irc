@@ -117,18 +117,19 @@ void	Server::Replyer(int cmd, Client *c, std::vector<std::string> v, fd_set *cur
 	switch(cmd)
 	{
 		case PING :
-			ss = "PONG 42IRC\r\n"; 
+			ss = "PONG\r\n"; 
 			send(c->getFd(),ss.c_str() , ss.size(), 0);
 			break;
 		
 		case JOIN :
 
+			//Add parsing for 2+ Channell 1+ key, Add operator(admin) for the first client who join th channel, Add Channel reply and forward to other client in channel
 			ss = ":" + c->getFullIdentifier() + " " + ReplyCreator(v, c, 0);
-			//ss.append(ReplyCreator(v, c, 0));
-			//ss.append("332 <client> <channel> :<topic> \r\n 353 <client> <symbol> <channel> :[prefix]<nick>{ [prefix]<nick>}\r\n 366 <client> <channel> :End of /NAMES list\r\n ");
-			// ss.append(" #pol : topic is not setted yet\r\n ");
+
+			//HERE -> Create the parsing function to add channels to vectors and err controls 
+			
 			send(c->getFd(), ss.c_str(), ss.size(), 0);
-			std::cout << ss <<ss.size()<< std::endl;
+			std::cout << ss << std::endl;
 			break;
 
 		case QUIT :
@@ -158,24 +159,22 @@ std::string Server::ReplyCreator(std::vector<std::string> v, Client *c, int i)
 
 void	Server::login(Client *c, int event_fd, std::vector<std::string> v)
 {
-	// if (c->getFirst() == false)
-	// {
-	// 	send(event_fd, "451 : not registered\r\n ", 24, 0);
-	// 	c->setFirst();
-	// }
-	
+	int kok = 0;
 	for (std::vector<std::string>::iterator it = v.begin(); it != v.end(); it++)
 	{
 		if (!it->compare("PASS"))
 		{
+			kok = 1;
 			it++;
 			if (getPassword().compare(*it) != 0)
 			{
-				send(event_fd, "464 : Password incorrect\r\n ", 28, 0);
+				send(event_fd, "464 : Password incorrect\r\n", 28, 0);
 				close(event_fd);
 				_cVec.pop_back();
 				break ;
 			}
+			else
+				c->setPassed(true);
 		}
 		else if (!it->compare("NICK"))
 		{
@@ -195,16 +194,24 @@ void	Server::login(Client *c, int event_fd, std::vector<std::string> v)
 				c->setUsername(str);
 			}	
 		}
-		//set RealName not explicitly required
 	}
-	if (c->getNick().size() && c->getUsername().size())
+	if (kok == 0)
+		send(c->getFd(), "461 PASS :Not enough parameters\r\n", 34, 0);
+	if (c->getNick().size() && c->getUsername().size() && c->getPassed() == true)
 	{
 		c->setFullIdentifier();
 		std::ostringstream RPL;
-		RPL << "001 : Welcome to the 42IRC Network, " << c->getNick() <<"!"<<c->getUsername()<<"@"<<c->getHostAddress()<<"\r\n"
-		<< "002 : Your host is 42IRC, running version 1.2\r\n003 : This server was created " << getCreationTime() << "\r\n"
-		<< "004 " << c->getFullIdentifier() << " 42IRC 1.2 o boktmvnls\r\n";
+		RPL << ":42IRC 001 " << c->getNick() << " :Welcome to the 42IRC Network, " << c->getNick() << "!" << c->getUsername() << "@" << c->getHostAddress() <<"\r\n";
 		send(event_fd, RPL.str().c_str(), RPL.str().size(), 0);
+		std::ostringstream RPL1;
+		RPL1 <<":42IRC 002 " << c->getNick() << " :Your host is 42IRC, running version 1.2\r\n";
+		send(event_fd, RPL1.str().c_str(), RPL1.str().size(), 0);
+		std::ostringstream RPL2;
+		RPL2 <<":42IRC 003 " << c->getNick() << " :This server was created " << getCreationTime() << "\r\n";
+		send(event_fd, RPL2.str().c_str(), RPL2.str().size(), 0);
+		std::ostringstream RPL3;
+		RPL3 <<":42IRC 004 " << c->getNick() << " 42IRC 1.2 o boktmvnls ovkl\r\n";
+		send(event_fd, RPL3.str().c_str(), RPL3.str().size(), 0);
 		c->setIsRegistered(true);
 	}
 }
@@ -230,9 +237,12 @@ int		Server::checkNick(std::string nick, int fd)
 		send(fd, "431 : No nickname given\r\n", 26, 0);
 		return 0;
 	}
+	if (nick.size() > 9)
+	{send(fd, "432 : Erroneous nickname\r\n", 27, 0);
+			return 0;}
 	for (int i = 0; i < nick.size(); i++)
 	{
-		if (!isprint(nick[i]))
+		if (!isprint(nick[i]) || !nick.compare(i, i+1, " "))
 		{
 			send(fd, "432 : Erroneous nickname\r\n", 27, 0);
 			return 0;

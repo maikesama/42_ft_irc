@@ -9,7 +9,7 @@ class Client
 {
 
     public :
-        Client(int fd, std::string Host) : _fd(fd), _HostAddress(Host), _isRegistered(false), first(false) {};
+        Client(int fd, std::string Host) : _fd(fd), _HostAddress(Host), _isRegistered(false), Passed(false) {};
         Client() {};
         ~Client() {};
 
@@ -30,14 +30,14 @@ class Client
         }
 
         bool    getIsRegistered() const { return _isRegistered; };
-        bool    getFirst() const { return first; };
+        bool    getPassed() const { return Passed; };
         int     getFd() const { return _fd; };
         const std::string & getNick() const { return _Nick; };
         const std::string & getRealName() const { return _Realname; };
         const std::string & getUsername() const { return _Username; };
         const std::string & getHostAddress() const { return _HostAddress; };
         const std::string & getFullIdentifier() const { return _FullIdentifier; };
-
+        const std::vector<std::string> & getClientChannel() {return _ch;}
 
         void    setFullIdentifier()
         {
@@ -50,11 +50,11 @@ class Client
         void    setNick(const std::string & n) { _Nick = n; 
         //control isvalid
         }
-        void    setFirst() { first = true; }
+        void    setPassed(bool x) { Passed = x; }
         void    setRealName(const std::string & n) { _Realname = n; }
         void    setUsername(const std::string & n) { _Username = n; }
         void    setIsRegistered( bool k ) { _isRegistered = k; }
-
+        void    setNewClientChannel(std::string ch) { _ch.push_back(ch); }
 
 
     private :
@@ -67,8 +67,9 @@ class Client
 
         bool        _isRegistered;
 
-        bool        first;
+        bool        Passed;
 
+        std::vector<std::string> _ch;
         int         _fd;
 
 };
