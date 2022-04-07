@@ -74,7 +74,7 @@ void    Server::launch()
 					char buf[4096];
 					bzero(buf, 4096);
 					int bytes_read = recv (i, buf, 4096, 0);
-					std::cout << buf << std::endl;
+					//std::cout << buf << std::endl;
 					
 					if (bytes_read <= 0)
 					{
@@ -84,14 +84,30 @@ void    Server::launch()
 					else
 					{
 						Client *c(&findClient(i));
+						std::vector<std::string> v;
+						c->addPersonalBuff(std::string(buf));
 
-						std::vector<std::string> v = ft_split(buf, " :\r\n");
-
-						if (c->getIsRegistered() == false)
-							login(c, i, v);
-						else if (c->getIsRegistered() == true)
-							MessageHandler(v, c, i, &currentSockets);
-						v.clear();
+						if (c->messageReady() == true)
+						{
+							std::cout<< c->getPersonalBuff() << std::endl;
+							if (c->getIsRegistered() == false)
+							{
+								v = ft_split((char *)c->getPersonalBuff().c_str(), " :\r\n");
+								login(c, i, v);
+							}
+							else if (c->getIsRegistered() == true)
+							{
+									Message mess;
+									v = ft_split((char *)c->getPersonalBuff().c_str(), " \r\n");
+									if (v.size() > 0)
+									{
+										initializeMess(&mess, v);
+										MessageHandler(&mess, c, &currentSockets);
+									}
+							}
+							v.clear();
+							c->clearPersonalBuff();
+						}
 					}
 				}
 			}
@@ -99,18 +115,18 @@ void    Server::launch()
 	}
 }
 
-void	Server::MessageHandler(std::vector<std::string> v, Client *c, int fd, fd_set *currentsockets)
+void	Server::MessageHandler(Message *mess, Client *c, fd_set *currentsockets)
 {
 	
-	if (!v[0].compare("PING"))
-		Replyer(PING, c, v, currentsockets);
-	else if (!v[0].compare("JOIN"))
-		Replyer(JOIN, c, v, currentsockets);
-	else if(!v[0].compare("QUIT"))
-		Replyer(QUIT, c, v, currentsockets);
+	if (!mess->command.compare("PING"))
+		Replyer(PING, c, mess, currentsockets);
+	else if (!mess->command.compare("JOIN"))
+		Replyer(JOIN, c, mess, currentsockets);
+	else if(!mess->command.compare("QUIT"))
+		Replyer(QUIT, c, mess, currentsockets);
 }
 
-void	Server::Replyer(int cmd, Client *c, std::vector<std::string> v, fd_set *currentsockets)
+void	Server::Replyer(int cmd, Client *c, Message *mess, fd_set *currentsockets)
 {
 	std::string ss;
 
@@ -122,18 +138,11 @@ void	Server::Replyer(int cmd, Client *c, std::vector<std::string> v, fd_set *cur
 			break;
 		
 		case JOIN :
-
-			//Add parsing for 2+ Channell 1+ key, Add operator(admin) for the first client who join th channel, Add Channel reply and forward to other client in channel
-			ss = ":" + c->getFullIdentifier() + " " + ReplyCreator(v, c, 0);
-
-			//HERE -> Create the parsing function to add channels to vectors and err controls 
-			
-			send(c->getFd(), ss.c_str(), ss.size(), 0);
-			std::cout << ss << std::endl;
+			joinCmd(mess, c);
 			break;
 
 		case QUIT :
-			ss = "ERROR Closing link : " + c->getFullIdentifier() + " " + ReplyCreator(v, c, 1);
+			ss = "ERROR Closing link : " + c->getFullIdentifier() + " " + ReplyCreator(mess, c, 1);
 			send(c->getFd(),ss.c_str() , ss.size(), 0);
 			closeClientConnection(c->getFd(), currentsockets);
 			break ;
@@ -142,13 +151,120 @@ void	Server::Replyer(int cmd, Client *c, std::vector<std::string> v, fd_set *cur
 	}
 }
 
-std::string Server::ReplyCreator(std::vector<std::string> v, Client *c, int i)
+
+//ERRONEOUS SPLIT ON KEYS, IT TAKES THAT AS A NAME OF THE CHANNEL PARAMETER; NEED FIX + NEED TO SAVE CLIENT OPERATOR ON CHANNELL AND SET tn CHANNEL MODES
+void	Server::joinCmd(Message *mess, Client *c)
+{
+	if (!mess->params.size())
+	{
+		send(c->getFd(), "461 JOIN :Not enough parameters\r\n", 34, 0);
+		return ;
+	}
+	std::vector<std::string>	channels;
+	std::vector<std::string>	keys;
+
+	char ut[4096];
+	bzero(ut, 4096);
+	memcpy(ut, mess->params[0].c_str(), mess->params[0].size());
+	channels = ft_split(ut, ",");
+
+	bzero(ut, 4096);
+	memcpy(ut, mess->params[1].c_str(), mess->params[1].size());
+	if (ut[0] != 0)
+		keys = ft_split(ut, ",");
+
+	for (int i = 0; i < channels.size(); i++)
+	{
+		if (channelExist(channels[i]) == true)
+		{
+			Channel *ch = findChannel(channels[i]);
+			if (ch->getKey().size() == 0 || (i < keys.size() && keys[i].compare(ch->getKey()) == 0))
+			{	
+				std::string s = ":" + c->getFullIdentifier() + " JOIN " + channels[i] + (i < keys.size() ? keys[i] + "\r\n" : "\r\n");
+				send (c->getFd(), s.c_str(), s.size(), 0);
+				std::vector<int> clients = ch->getClients();
+				for (int i = 0; i < clients.size(); i++)
+					send(clients[i], s.c_str(), s.size(), 0);
+				sendChannelInformation(c, ch, 1);
+				ch->setNewClient(c->getFd());
+				c->setNewClientChannel(channels[i]);
+			}
+			else
+			{
+				std::string s = "475 " + channels[i] + " :Cannot join channel (+k)";
+				send(c->getFd(), s.c_str(), s.size(), 0);
+			}
+		}
+		else
+		{
+			Channel *chan;
+
+			if (i < keys.size())
+				chan = new Channel(channels[i], keys[i]);
+			else
+				chan = new Channel(channels[i]);
+			
+			_chV.push_back(chan);
+			std::string s = ":" + c->getFullIdentifier() + " JOIN " + channels[i] + (i < keys.size() ? keys[i] + "\r\n" : "\r\n");
+			send (c->getFd(), s.c_str(), s.size(), 0);
+			sendChannelInformation(c, chan, 0);
+			s.clear();
+			s = "MODE " + chan->getName() + " +o " + c->getNick() + "\r\n";
+			send(c->getFd(), s.c_str(), s.size(), 0);
+			chan->setNewClient(c->getFd());
+			c->setNewClientChannel(channels[i]);
+		}
+	}
+	return ;
+
+}
+
+void	Server::sendChannelInformation(Client *c, Channel *ch, int id)
+{
+	std::string s = (ch->getTopic().size() > 0 ? (":42IRC 332 " + c->getNick() + " " + ch->getName() + " :" + ch->getTopic() + "\r\n") : (":42IRC 331 " + c->getNick() + " " + ch->getName() + " :No topic is set\r\n"));
+	send(c->getFd(), s.c_str(), s.size(), 0);
+	if (id == 1)
+	{
+		s.clear();
+		s = ":42IRC 353 " + c->getNick() + " " + (ch->isSecret() == false ? "= " : "@ ") + ch->getName() + " :";
+		//ADD CLIENT PREFIX BEFORE NAME WHEN ITS ADDED!!!!
+		std::vector<int> v = ch->getClients();
+		for (int i = 0; i < v.size(); i++)
+		{
+			Client *cl(&findClient(v[i]));
+			if (i + 1 < v.size())
+				s+= cl->getNick() + " ";
+			else
+				s+= cl->getNick() + "\r\n";
+		}
+		send(c->getFd(), s.c_str(), s.size(), 0);
+
+		s.clear();
+		s = "42IRC 366 " + c->getNick() + " " + ch->getName() + " :End of NAMES list\r\n";
+		send(c->getFd(), s.c_str(), s.size(), 0);
+	}
+
+}
+
+Channel * Server::findChannel(std::string name) const
+{
+	for (int i = 0; i < _chV.size(); i++)
+	{
+		if (_chV[i]->getName().compare(name) == 0)
+			return _chV[i];
+	}
+	return NULL;
+} 
+
+std::string Server::ReplyCreator(Message *mess, Client *c, int i)
 {
 	std::string ss;
 	
-	for (std::vector<std::string>::iterator it = v.begin() + i; it != v.end(); it++)
+	if (i == 0)
+		ss += mess->command + " ";
+	for (std::vector<std::string>::iterator it = mess->params.begin() + i; it != mess->params.end(); it++)
 	{
-		if (it + 1 != v.end())
+		if (it + 1 != mess->params.end())
 			ss += *it + " ";
 		else
 			ss += *it;
@@ -195,23 +311,17 @@ void	Server::login(Client *c, int event_fd, std::vector<std::string> v)
 			}	
 		}
 	}
-	if (kok == 0)
+	if (kok == 0 && c->getPassed() == false)
 		send(c->getFd(), "461 PASS :Not enough parameters\r\n", 34, 0);
 	if (c->getNick().size() && c->getUsername().size() && c->getPassed() == true)
 	{
 		c->setFullIdentifier();
 		std::ostringstream RPL;
-		RPL << ":42IRC 001 " << c->getNick() << " :Welcome to the 42IRC Network, " << c->getNick() << "!" << c->getUsername() << "@" << c->getHostAddress() <<"\r\n";
+		RPL << ":42IRC 001 " << c->getNick() << " :Welcome to the 42IRC Network, " << c->getNick() << "!" << c->getUsername() << "@" << c->getHostAddress() <<"\r\n"
+		<<":42IRC 002 " << c->getNick() << " :Your host is 42IRC, running version 1.2\r\n"
+		<<":42IRC 003 " << c->getNick() << " :This server was created " << getCreationTime() << "\r\n"
+		<<":42IRC 004 " << c->getNick() << " 42IRC 1.2 o boktmvnls ovkl\r\n";
 		send(event_fd, RPL.str().c_str(), RPL.str().size(), 0);
-		std::ostringstream RPL1;
-		RPL1 <<":42IRC 002 " << c->getNick() << " :Your host is 42IRC, running version 1.2\r\n";
-		send(event_fd, RPL1.str().c_str(), RPL1.str().size(), 0);
-		std::ostringstream RPL2;
-		RPL2 <<":42IRC 003 " << c->getNick() << " :This server was created " << getCreationTime() << "\r\n";
-		send(event_fd, RPL2.str().c_str(), RPL2.str().size(), 0);
-		std::ostringstream RPL3;
-		RPL3 <<":42IRC 004 " << c->getNick() << " 42IRC 1.2 o boktmvnls ovkl\r\n";
-		send(event_fd, RPL3.str().c_str(), RPL3.str().size(), 0);
 		c->setIsRegistered(true);
 	}
 }

@@ -70,6 +70,16 @@ class Server
 			return std::string(str);
 		}
 
+		bool	channelExist(std::string	name)
+		{
+			for (int i = 0; i < _chV.size(); i++)
+			{
+				if (name.compare(_chV[i]->getName()) == 0)
+					return true;
+			}
+			return false;
+		}
+
 		const std::string & getPassword(void) const { return this->Password; };
 
 
@@ -78,6 +88,10 @@ class Server
 		void	launch();
 
 		Client & findClient(int fd) const;
+		Channel * findChannel(std::string name) const;
+
+		void	sendChannelInformation(Client *c, Channel *ch, int id);
+
 		void	closeClientConnection(int fd, fd_set *currentsocket);
 
 		//check login information
@@ -85,9 +99,11 @@ class Server
 		int		checkUser(std::string user, int fd);
 
 		void	login(Client *c, int event_fd, std::vector<std::string> v);
-		void	Replyer(int cmd, Client *c, std::vector<std::string> v, fd_set *currentsockets);
-		void	MessageHandler(std::vector<std::string> v, Client *c, int fd, fd_set *currentsockets);
-		std::string	ReplyCreator(std::vector<std::string> v, Client *c, int i);
+		void	Replyer(int cmd, Client *c, Message *mess, fd_set *currentsockets);
+		void	MessageHandler(Message *mess, Client *c, fd_set *currentsockets);
+		std::string	ReplyCreator(Message *mess, Client *c, int i);
+
+		void	joinCmd(Message *mess, Client *c);
 
 	private :
 		int	port;

@@ -7,8 +7,8 @@
 class Channel
 {
     public :
-        Channel(std::string name) : _name(name) {};
-        Channel(std::string name, std::string key) : _name(name), _key(key) {}; 
+        Channel(std::string name) : _name(name), secret(false) {};
+        Channel(std::string name, std::string key) : _name(name), _key(key), secret(false) {}; 
         ~Channel() {};
 
 
@@ -27,16 +27,27 @@ class Channel
             }
         }
 
+
+        void    setSecret(bool is) { secret = is; }
+        void    setTopic(std::string top) { topic = top; }
+
         const std::vector<int> & getClients() const { return _fd; }
 
         const std::string & getName() const { return _name; }
 
         const std::string & getKey() {return _key;}
 
+        const std::string & getTopic() {return topic;}
+
+        bool isSecret() {return secret;}
+
     private :
         std::string _name;
         std::vector<int> _fd;
         std::string _key;
+        std::string topic;
+
+        bool secret;
 };
 
 

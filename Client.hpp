@@ -4,6 +4,7 @@
 #include "main.hpp"
 #include <iostream>
 #include <sstream>
+#include <vector>
 
 class Client 
 {
@@ -32,12 +33,14 @@ class Client
         bool    getIsRegistered() const { return _isRegistered; };
         bool    getPassed() const { return Passed; };
         int     getFd() const { return _fd; };
+
         const std::string & getNick() const { return _Nick; };
         const std::string & getRealName() const { return _Realname; };
         const std::string & getUsername() const { return _Username; };
         const std::string & getHostAddress() const { return _HostAddress; };
         const std::string & getFullIdentifier() const { return _FullIdentifier; };
         const std::vector<std::string> & getClientChannel() {return _ch;}
+        const std::string & getPersonalBuff() const { return personalBuff; }
 
         void    setFullIdentifier()
         {
@@ -45,6 +48,18 @@ class Client
 
             ss << getNick() << "!" << getUsername() << "@" << getHostAddress();
             _FullIdentifier = ss.str();
+        }
+
+        void    clearPersonalBuff()
+        {
+            personalBuff.clear();
+        }
+
+        bool    messageReady()
+        {
+            if (personalBuff.compare(personalBuff.size() - 2, personalBuff.size()-1, "\r\n") == 0)
+                return true;
+            return false;
         }
 
         void    setNick(const std::string & n) { _Nick = n; 
@@ -55,6 +70,7 @@ class Client
         void    setUsername(const std::string & n) { _Username = n; }
         void    setIsRegistered( bool k ) { _isRegistered = k; }
         void    setNewClientChannel(std::string ch) { _ch.push_back(ch); }
+        void    addPersonalBuff(std::string str) { personalBuff += str; }
 
 
     private :
@@ -72,6 +88,8 @@ class Client
         std::vector<std::string> _ch;
         int         _fd;
 
+
+        std::string     personalBuff;
 };
 
 #endif

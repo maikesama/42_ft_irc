@@ -21,7 +21,7 @@
 #include <cstdlib>
 
 
-const std::vector<std::string> ft_split(char *str, const char *ctos);
+const std::vector<std::string> ft_split(char* str, const char *ctos);
 
 
 #endif

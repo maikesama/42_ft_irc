@@ -1,8 +1,8 @@
 NAME = ircserv
 
-CC = g++ -Wall -Werror -Wextra -std=c++98 #-fsanitize=address
+CC = g++ -Wall -Werror -Wextra -std=c++98 -fsanitize=address
 
-SRCS = main.cpp Server.cpp\
+SRCS = main.cpp Server.cpp Commands.cpp\
 
 OBJS = $(SRCS:.cpp=.o)
 
