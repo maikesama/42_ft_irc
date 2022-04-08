@@ -90,7 +90,7 @@ class Server
 		Client & findClient(int fd) const;
 		Channel * findChannel(std::string name) const;
 
-		void	sendChannelInformation(Client *c, Channel *ch, int id);
+		void	sendChannelInformation(Client *c, Channel *ch);
 
 		void	closeClientConnection(int fd, fd_set *currentsocket);
 

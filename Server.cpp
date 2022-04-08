@@ -142,7 +142,7 @@ void	Server::Replyer(int cmd, Client *c, Message *mess, fd_set *currentsockets)
 			break;
 
 		case QUIT :
-			ss = "ERROR Closing link : " + c->getFullIdentifier() + " " + ReplyCreator(mess, c, 1);
+			ss = ":" +c->getFullIdentifier() + " QUIT\r\n";
 			send(c->getFd(),ss.c_str() , ss.size(), 0);
 			closeClientConnection(c->getFd(), currentsockets);
 			break ;
@@ -152,7 +152,6 @@ void	Server::Replyer(int cmd, Client *c, Message *mess, fd_set *currentsockets)
 }
 
 
-//ERRONEOUS SPLIT ON KEYS, IT TAKES THAT AS A NAME OF THE CHANNEL PARAMETER; NEED FIX + NEED TO SAVE CLIENT OPERATOR ON CHANNELL AND SET tn CHANNEL MODES
 void	Server::joinCmd(Message *mess, Client *c)
 {
 	if (!mess->params.size())
@@ -179,19 +178,19 @@ void	Server::joinCmd(Message *mess, Client *c)
 		{
 			Channel *ch = findChannel(channels[i]);
 			if (ch->getKey().size() == 0 || (i < keys.size() && keys[i].compare(ch->getKey()) == 0))
-			{	
-				std::string s = ":" + c->getFullIdentifier() + " JOIN " + channels[i] + (i < keys.size() ? keys[i] + "\r\n" : "\r\n");
+			{
+				std::string s = ":" + c->getFullIdentifier() + " JOIN " + channels[i] + "\r\n";
 				send (c->getFd(), s.c_str(), s.size(), 0);
 				std::vector<int> clients = ch->getClients();
 				for (int i = 0; i < clients.size(); i++)
 					send(clients[i], s.c_str(), s.size(), 0);
-				sendChannelInformation(c, ch, 1);
 				ch->setNewClient(c->getFd());
 				c->setNewClientChannel(channels[i]);
+				sendChannelInformation(c, ch);
 			}
 			else
 			{
-				std::string s = "475 " + channels[i] + " :Cannot join channel (+k)";
+				std::string s = ":42IRC 475 " + c->getNick() + " " + channels[i] + " :Cannot join channel (+k)\r\n";
 				send(c->getFd(), s.c_str(), s.size(), 0);
 			}
 		}
@@ -205,44 +204,44 @@ void	Server::joinCmd(Message *mess, Client *c)
 				chan = new Channel(channels[i]);
 			
 			_chV.push_back(chan);
-			std::string s = ":" + c->getFullIdentifier() + " JOIN " + channels[i] + (i < keys.size() ? keys[i] + "\r\n" : "\r\n");
+			std::string s = ":" + c->getFullIdentifier() + " JOIN " + channels[i] + "\r\n";
 			send (c->getFd(), s.c_str(), s.size(), 0);
-			sendChannelInformation(c, chan, 0);
-			s.clear();
-			s = "MODE " + chan->getName() + " +o " + c->getNick() + "\r\n";
-			send(c->getFd(), s.c_str(), s.size(), 0);
 			chan->setNewClient(c->getFd());
 			c->setNewClientChannel(channels[i]);
+			chan->setNewOperator(c->getFd());
+			sendChannelInformation(c, chan);
+			s.clear();
+			s = ":42IRC 324 " + c->getNick() + " " + chan->getName() + (i < keys.size() ? (" otnk " + chan->getKey() + "\r\n") : " otn\r\n");
+			send(c->getFd(), s.c_str(), s.size(), 0);
 		}
 	}
 	return ;
 
 }
 
-void	Server::sendChannelInformation(Client *c, Channel *ch, int id)
+void	Server::sendChannelInformation(Client *c, Channel *ch)
 {
-	std::string s = (ch->getTopic().size() > 0 ? (":42IRC 332 " + c->getNick() + " " + ch->getName() + " :" + ch->getTopic() + "\r\n") : (":42IRC 331 " + c->getNick() + " " + ch->getName() + " :No topic is set\r\n"));
-	send(c->getFd(), s.c_str(), s.size(), 0);
-	if (id == 1)
-	{
-		s.clear();
-		s = ":42IRC 353 " + c->getNick() + " " + (ch->isSecret() == false ? "= " : "@ ") + ch->getName() + " :";
-		//ADD CLIENT PREFIX BEFORE NAME WHEN ITS ADDED!!!!
-		std::vector<int> v = ch->getClients();
-		for (int i = 0; i < v.size(); i++)
-		{
-			Client *cl(&findClient(v[i]));
-			if (i + 1 < v.size())
-				s+= cl->getNick() + " ";
-			else
-				s+= cl->getNick() + "\r\n";
-		}
-		send(c->getFd(), s.c_str(), s.size(), 0);
+	std::string s;
 
-		s.clear();
-		s = "42IRC 366 " + c->getNick() + " " + ch->getName() + " :End of NAMES list\r\n";
-		send(c->getFd(), s.c_str(), s.size(), 0);
+	s = (ch->getTopic().size() > 0 ? (":42IRC 332 " + c->getNick() + " " + ch->getName() + " :" + ch->getTopic() + "\r\n") : (":42IRC 331 " + c->getNick() + " " + ch->getName() + " :No topic is set\r\n"));
+	send(c->getFd(), s.c_str(), s.size(), 0);
+
+	s.clear();
+	s = ":42IRC 353 " + c->getNick() + " " + (ch->isSecret() == false ? "= " : "@ ") + ch->getName() + " :";
+	std::vector<int> v = ch->getClients();
+	for (int i = 0; i < v.size(); i++)
+	{
+		Client *cl(&findClient(v[i]));
+		if (i + 1 < v.size())
+			s+= (ch->isAnOperator(cl->getFd()) == true ? "@" + cl->getNick() : cl->getNick()) + " ";
+		else
+			s+= (ch->isAnOperator(cl->getFd()) == true ? "@" + cl->getNick() : cl->getNick()) + "\r\n";
 	}
+	send(c->getFd(), s.c_str(), s.size(), 0);
+
+	s.clear();
+	s = ":42IRC 366 " + c->getNick() + " " + ch->getName() + " :End of NAMES list\r\n";
+	send(c->getFd(), s.c_str(), s.size(), 0);
 
 }
 
@@ -284,7 +283,7 @@ void	Server::login(Client *c, int event_fd, std::vector<std::string> v)
 			it++;
 			if (getPassword().compare(*it) != 0)
 			{
-				send(event_fd, "464 : Password incorrect\r\n", 28, 0);
+				send(event_fd, ":42IRC 464 : Password incorrect\r\n", 28, 0);
 				close(event_fd);
 				_cVec.pop_back();
 				break ;
@@ -312,7 +311,7 @@ void	Server::login(Client *c, int event_fd, std::vector<std::string> v)
 		}
 	}
 	if (kok == 0 && c->getPassed() == false)
-		send(c->getFd(), "461 PASS :Not enough parameters\r\n", 34, 0);
+		send(c->getFd(), ":42IRC 461 PASS :Not enough parameters\r\n", 34, 0);
 	if (c->getNick().size() && c->getUsername().size() && c->getPassed() == true)
 	{
 		c->setFullIdentifier();
@@ -330,7 +329,7 @@ int		Server::checkUser(std::string user, int fd)
 {
 	if (user.size() <= 0)
 	{
-		send(fd, "461 USER : Not enough parameters\r\n", 35, 0);
+		send(fd, ":42IRC 461 USER : Not enough parameters\r\n", 35, 0);
 		return 0;
 	}
 	else if (user.size() > 12)
@@ -344,17 +343,17 @@ int		Server::checkNick(std::string nick, int fd)
 {
 	if (nick.size() <= 0)
 	{
-		send(fd, "431 : No nickname given\r\n", 26, 0);
+		send(fd, ":42IRC 431 : No nickname given\r\n", 26, 0);
 		return 0;
 	}
 	if (nick.size() > 9)
-	{send(fd, "432 : Erroneous nickname\r\n", 27, 0);
+	{send(fd, ":42IRC 432 : Erroneous nickname\r\n", 27, 0);
 			return 0;}
 	for (int i = 0; i < nick.size(); i++)
 	{
 		if (!isprint(nick[i]) || !nick.compare(i, i+1, " "))
 		{
-			send(fd, "432 : Erroneous nickname\r\n", 27, 0);
+			send(fd, ":42IRC 432 : Erroneous nickname\r\n", 27, 0);
 			return 0;
 		}
 	}
@@ -363,7 +362,7 @@ int		Server::checkNick(std::string nick, int fd)
 		Client *c = *it;
 		if (c->getFd() != fd && !c->getNick().compare(nick))
 		{
-			send(fd, "433 : Nickname already in use\r\n", 32, 0);
+			send(fd, ":42IRC 433 : Nickname already in use\r\n", 32, 0);
 			return 0;
 		}
 	}

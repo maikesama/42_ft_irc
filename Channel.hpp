@@ -27,6 +27,29 @@ class Channel
             }
         }
 
+        void    setNewOperator(int fd)
+        {
+            operators.push_back(fd);
+        }
+
+        void    removeOperator(int fd)
+        {
+            for (std::vector<int>::iterator it = operators.begin(); it != operators.end(); it++)
+            {
+                if (*it == fd)
+                    operators.erase(it);
+            }
+        }
+
+        bool    isAnOperator(int fd)
+        {
+            for (std::vector<int>::iterator it = operators.begin(); it != operators.end(); it++)
+            {
+                if (*it == fd)
+                    return true;
+            }
+            return false;
+        }
 
         void    setSecret(bool is) { secret = is; }
         void    setTopic(std::string top) { topic = top; }
@@ -48,6 +71,8 @@ class Channel
         std::string topic;
 
         bool secret;
+
+        std::vector<int> operators;
 };
 
 
