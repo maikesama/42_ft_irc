@@ -24,6 +24,8 @@ class Channel
             {
                 if (*it == fd)
                     _fd.erase(it);
+                if (it == _fd.end())
+                    break;
             }
         }
 
@@ -38,6 +40,8 @@ class Channel
             {
                 if (*it == fd)
                     operators.erase(it);
+                if (it == operators.end())
+                    break;
             }
         }
 

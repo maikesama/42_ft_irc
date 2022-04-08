@@ -74,7 +74,6 @@ void    Server::launch()
 					char buf[4096];
 					bzero(buf, 4096);
 					int bytes_read = recv (i, buf, 4096, 0);
-					//std::cout << buf << std::endl;
 					
 					if (bytes_read <= 0)
 					{
@@ -83,7 +82,7 @@ void    Server::launch()
 					}
 					else
 					{
-						Client *c(&findClient(i));
+						Client *c = findClient(i);
 						std::vector<std::string> v;
 						c->addPersonalBuff(std::string(buf));
 
@@ -124,6 +123,10 @@ void	Server::MessageHandler(Message *mess, Client *c, fd_set *currentsockets)
 		Replyer(JOIN, c, mess, currentsockets);
 	else if(!mess->command.compare("QUIT"))
 		Replyer(QUIT, c, mess, currentsockets);
+	else if(!mess->command.compare("PRIVMSG"))
+		Replyer(PRIVMSG, c, mess, currentsockets);
+	else if(!mess->command.compare("PART"))
+		Replyer(PART, c, mess, currentsockets);
 }
 
 void	Server::Replyer(int cmd, Client *c, Message *mess, fd_set *currentsockets)
@@ -141,6 +144,14 @@ void	Server::Replyer(int cmd, Client *c, Message *mess, fd_set *currentsockets)
 			joinCmd(mess, c);
 			break;
 
+		case PRIVMSG :
+			privmsgCmd(mess, c);
+			break;
+		
+		case PART :
+			partCmd(mess, c);
+			break;
+
 		case QUIT :
 			ss = ":" +c->getFullIdentifier() + " QUIT\r\n";
 			send(c->getFd(),ss.c_str() , ss.size(), 0);
@@ -151,9 +162,145 @@ void	Server::Replyer(int cmd, Client *c, Message *mess, fd_set *currentsockets)
 	}
 }
 
+void	Server::partCmd(Message *mess, Client *c)
+{
+	std::string s;
+	std::vector<std::string> ctp;
+
+	if (mess->params.size() > 0)
+	{
+		std::string ut = mess->params[0];
+		ctp = ft_split((char*)ut.c_str(), ",");
+	}
+	else
+	{
+		s = "461 PART :Not enough parameters\r\n";
+		send(c->getFd(), s.c_str(), s.size(), 0);
+		return ;
+	}
+	std::string reason = ReplyCreator(mess, c, 1);
+
+	for (int i = 0; i < ctp.size(); i++)
+	{
+		if (channelExist(ctp[i]) == true)
+		{
+
+			if (c->isOnChannel(ctp[i]) == true)
+			{
+				s = ":" + c->getFullIdentifier() + " PART " + ctp[i] + (reason.size() > 0 ? " " + reason : "\r\n");
+				Channel *ch = findChannel(ctp[i]);
+				for (std::vector<int>::const_iterator it = ch->getClients().begin(); it != ch->getClients().end(); it++)
+						send(*it, s.c_str(), s.size(), 0);
+				c->removeChannel(ctp[i]);
+				ch->removeClient(c->getFd());
+				if (ch->isAnOperator(c->getFd()))
+					ch->removeOperator(c->getFd());
+				if (ch->getClients().size() == 0)
+					deleteChannel(ch->getName());
+			}
+			else
+			{
+				s = ":42IRC 442 " + ctp[i] + " :You're not on that channel\r\n";
+				send(c->getFd(), s.c_str(), s.size(), 0);
+			}
+		}
+		else
+		{
+			s = ":42IRC 403 " + ctp[i] + " :No such channel\r\n";
+			send(c->getFd(), s.c_str(), s.size(), 0);
+		}
+	}
+
+}
+
+void	Server::privmsgCmd(Message *mess, Client *c)
+{
+	std::string ut = mess->params[0];
+	std::vector<std::string> target = ft_split((char*)ut.c_str(), ",");
+	std::string msg = ReplyCreator(mess, c, 1);
+
+	if (msg.size() < 2)
+		send(c->getFd(), ":42IRC 412:No text to send\r\n", 29, 0);
+	for (int i = 0; i < target.size(); i++)
+	{
+		if (target[i][0] != '#') //nick
+		{
+			int flag = 0;
+			std::string s;
+			for (int j = 0; j < _cVec.size(); j++)
+			{
+				if (!_cVec[j]->getNick().compare(target[i]))
+				{
+					s = ":" + c->getFullIdentifier() + " PRIVMSG " + target[i] + " " + msg;
+					send(_cVec[j]->getFd(), s.c_str(), s.size(), 0);
+					flag = 1;
+					break;
+				}
+			}
+			if (flag == 0)
+			{
+				s = ":42IRC 401 " + target[i] + " :No such nick/channel\r\n";
+				send(c->getFd(), s.c_str(), s.size(), 0);
+			}
+		}
+		else //channel
+		{
+			int flag = 0;
+			std::string s;
+			for (int j = 0; j < _chV.size(); j++)
+			{
+				if (!_chV[j]->getName().compare(target[i]) && c->isOnChannel(target[i]) == false)
+				{
+					flag = 1;
+					s = ":42IRC 404 " + target[i] + " :Cannot send to channel\r\n";
+					send(c->getFd(), s.c_str(), s.size(), 0);
+					break;
+				}
+				else if (!_chV[j]->getName().compare(target[i]) && c->isOnChannel(target[i]) == true)
+				{
+					s = ":" + c->getFullIdentifier() + " PRIVMSG " + target[i] + " " + msg;
+					for (std::vector<int>::const_iterator it = _chV[j]->getClients().begin(); it != _chV[j]->getClients().end(); it++)
+					{
+						if (*it != c->getFd())
+							send(*it, s.c_str(), s.size(), 0);
+					}
+					flag = 1;
+					break;
+				}
+			}
+			if (flag == 0)
+			{
+				s = ":42IRC 401 " + target[i] + " :No such nick/channel\r\n";
+				send(c->getFd(), s.c_str(), s.size(), 0);
+			}
+		}
+	}
+}
+
+void initializePartAll(Message *alt, Client *c)
+{
+	alt->command = "PART";
+	std::string s;
+	for (std::vector<std::string>::const_iterator it = c->getClientChannel().begin(); it != c->getClientChannel().end(); it++)
+	{
+		if (it + 1 != c->getClientChannel().end())
+			s+= *it + ",";
+		else
+			s+= *it;
+	}
+	alt->params.push_back(s);
+}
 
 void	Server::joinCmd(Message *mess, Client *c)
 {
+	if (!mess->params[0].compare("#0"))
+	{
+		Message alt;
+		initializePartAll(&alt, c);
+		partCmd(&alt, c);
+		return ;
+	}
+
 	if (!mess->params.size())
 	{
 		send(c->getFd(), "461 JOIN :Not enough parameters\r\n", 34, 0);
@@ -231,7 +378,7 @@ void	Server::sendChannelInformation(Client *c, Channel *ch)
 	std::vector<int> v = ch->getClients();
 	for (int i = 0; i < v.size(); i++)
 	{
-		Client *cl(&findClient(v[i]));
+		Client *cl = findClient(v[i]);
 		if (i + 1 < v.size())
 			s+= (ch->isAnOperator(cl->getFd()) == true ? "@" + cl->getNick() : cl->getNick()) + " ";
 		else
@@ -311,7 +458,7 @@ void	Server::login(Client *c, int event_fd, std::vector<std::string> v)
 		}
 	}
 	if (kok == 0 && c->getPassed() == false)
-		send(c->getFd(), ":42IRC 461 PASS :Not enough parameters\r\n", 34, 0);
+		send(c->getFd(), "461 PASS :Not enough parameters\r\n", 34, 0);
 	if (c->getNick().size() && c->getUsername().size() && c->getPassed() == true)
 	{
 		c->setFullIdentifier();
@@ -329,7 +476,7 @@ int		Server::checkUser(std::string user, int fd)
 {
 	if (user.size() <= 0)
 	{
-		send(fd, ":42IRC 461 USER : Not enough parameters\r\n", 35, 0);
+		send(fd, "461 USER : Not enough parameters\r\n", 35, 0);
 		return 0;
 	}
 	else if (user.size() > 12)
@@ -343,17 +490,17 @@ int		Server::checkNick(std::string nick, int fd)
 {
 	if (nick.size() <= 0)
 	{
-		send(fd, ":42IRC 431 : No nickname given\r\n", 26, 0);
+		send(fd, "431 : No nickname given\r\n", 26, 0);
 		return 0;
 	}
 	if (nick.size() > 9)
-	{send(fd, ":42IRC 432 : Erroneous nickname\r\n", 27, 0);
+	{send(fd, "432 : Erroneous nickname\r\n", 27, 0);
 			return 0;}
 	for (int i = 0; i < nick.size(); i++)
 	{
 		if (!isprint(nick[i]) || !nick.compare(i, i+1, " "))
 		{
-			send(fd, ":42IRC 432 : Erroneous nickname\r\n", 27, 0);
+			send(fd, "432 : Erroneous nickname\r\n", 27, 0);
 			return 0;
 		}
 	}
@@ -362,7 +509,7 @@ int		Server::checkNick(std::string nick, int fd)
 		Client *c = *it;
 		if (c->getFd() != fd && !c->getNick().compare(nick))
 		{
-			send(fd, ":42IRC 433 : Nickname already in use\r\n", 32, 0);
+			send(fd, "433 : Nickname already in use\r\n", 32, 0);
 			return 0;
 		}
 	}
@@ -387,15 +534,14 @@ void	Server::closeClientConnection(int fd, fd_set *currentsocket)
 	FD_CLR(fd, currentsocket);
 }
 
-Client & Server::findClient(int fd) const
+Client * Server::findClient(int fd) const
 {
 	Client *c;
 
-	for (std::vector<Client*>::const_iterator _cIt = _cVec.begin(); _cIt != _cVec.end(); _cIt++)
+	for (int i = 0; i < _cVec.size(); i++)
 	{
-		c = *_cIt;
-		if (c->getFd() == fd)
-			return *c;
+		if (_cVec[i]->getFd() == fd)
+			return _cVec[i];
 	}
-	return *c;
+	return NULL;
 }

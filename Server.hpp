@@ -87,12 +87,24 @@ class Server
 
 		void	launch();
 
-		Client & findClient(int fd) const;
+		Client * findClient(int fd) const;
 		Channel * findChannel(std::string name) const;
 
 		void	sendChannelInformation(Client *c, Channel *ch);
 
 		void	closeClientConnection(int fd, fd_set *currentsocket);
+
+		void	deleteChannel(std::string name)
+		{
+			int i = 0;
+			for (std::vector<Channel*>::const_iterator it = _chV.begin(); it != _chV.end(); it++)
+			{
+				if (_chV[i]->getName().compare(name) == 0)
+					_chV.erase(it);
+				if (it == _chV.end())
+					break;
+			}
+		}
 
 		//check login information
 		int		checkNick(std::string nick, int fd);
@@ -103,7 +115,10 @@ class Server
 		void	MessageHandler(Message *mess, Client *c, fd_set *currentsockets);
 		std::string	ReplyCreator(Message *mess, Client *c, int i);
 
+		//CMD
 		void	joinCmd(Message *mess, Client *c);
+		void	privmsgCmd(Message *mess, Client *c);
+		void	partCmd(Message *mess, Client *c);
 
 	private :
 		int	port;

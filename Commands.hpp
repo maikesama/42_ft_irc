@@ -15,7 +15,8 @@ enum ecommands{
 	PING,
 	JOIN,
 	QUIT,
-	
+	PRIVMSG,
+	PART,
 };
 
 void	initializeMess(Message *mess, std::vector<std::string> v);

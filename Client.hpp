@@ -62,6 +62,27 @@ class Client
             return false;
         }
 
+        bool isOnChannel(std::string name)
+        {
+            for (int i = 0; i < _ch.size(); i++)
+            {
+                if (_ch[i].compare(name) == 0)
+                    return true;
+            }
+            return false;
+        }
+
+        void    removeChannel(std::string chan)
+        {
+            for (std::vector<std::string>::const_iterator it = _ch.begin(); it != _ch.end(); it++)
+            {
+                if (it->compare(chan) == 0)
+                    _ch.erase(it);
+                if (it == _ch.end())
+                    break;
+            }
+        }
+
         void    setNick(const std::string & n) { _Nick = n; 
         //control isvalid
         }
