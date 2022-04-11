@@ -4,6 +4,7 @@
 
 #include "Client.hpp"
 #include "Channel.hpp"
+struct Message;
 #include "Commands.hpp"
 #include "main.hpp"
 #include <vector>
@@ -100,7 +101,10 @@ class Server
 			for (std::vector<Channel*>::const_iterator it = _chV.begin(); it != _chV.end(); it++)
 			{
 				if (_chV[i]->getName().compare(name) == 0)
+				{
+					delete *it;
 					_chV.erase(it);
+				}
 				if (it == _chV.end())
 					break;
 			}
@@ -119,6 +123,10 @@ class Server
 		void	joinCmd(Message *mess, Client *c);
 		void	privmsgCmd(Message *mess, Client *c);
 		void	partCmd(Message *mess, Client *c);
+		void	topicCmd(Message *mess, Client *c);
+		void	quitCmd(Message *mess, Client *c, fd_set *currentsockets);
+		void	nickCmd(Message *mess, Client *c);
+		void	namesCmd(Message *mess, Client *c);
 
 	private :
 		int	port;

@@ -127,269 +127,89 @@ void	Server::MessageHandler(Message *mess, Client *c, fd_set *currentsockets)
 		Replyer(PRIVMSG, c, mess, currentsockets);
 	else if(!mess->command.compare("PART"))
 		Replyer(PART, c, mess, currentsockets);
+	else if(!mess->command.compare("TOPIC"))
+		Replyer(TOPIC, c, mess, currentsockets);
+	else if(!mess->command.compare("NICK"))
+		Replyer(NICK, c, mess, currentsockets);
+	else if(!mess->command.compare("NAMES") || !mess->command.compare("names"))
+		Replyer(NAMES, c, mess, currentsockets);
 }
 
 void	Server::Replyer(int cmd, Client *c, Message *mess, fd_set *currentsockets)
 {
-	std::string ss;
-
 	switch(cmd)
 	{
-		case PING :
-			ss = "PONG\r\n"; 
-			send(c->getFd(),ss.c_str() , ss.size(), 0);
-			break;
+		case PING : send(c->getFd(),"PONG\r\n" , 7, 0); break;
 		
-		case JOIN :
-			joinCmd(mess, c);
-			break;
+		case JOIN : joinCmd(mess, c); break;
 
-		case PRIVMSG :
-			privmsgCmd(mess, c);
-			break;
+		case PRIVMSG : privmsgCmd(mess, c); break;
 		
-		case PART :
-			partCmd(mess, c);
-			break;
+		case PART : partCmd(mess, c); break;
 
-		case QUIT :
-			ss = ":" +c->getFullIdentifier() + " QUIT\r\n";
-			send(c->getFd(),ss.c_str() , ss.size(), 0);
-			closeClientConnection(c->getFd(), currentsockets);
-			break ;
+		case QUIT : quitCmd(mess, c, currentsockets); break ;
+
+		case TOPIC : topicCmd(mess, c); break;
+
+		case NICK : nickCmd(mess, c); break;
+
+		case NAMES : namesCmd(mess, c); break;
 
 		default : break;
 	}
 }
 
-void	Server::partCmd(Message *mess, Client *c)
+void	Server::namesCmd(Message *mess, Client *c)
 {
-	std::string s;
-	std::vector<std::string> ctp;
+	std::string ut = mess->params[0];
+	std::vector<std::string> v1 = ft_split((char*)ut.c_str(), ",");
 
-	if (mess->params.size() > 0)
+	std::string s;
+	if (!v1.size())
 	{
-		std::string ut = mess->params[0];
-		ctp = ft_split((char*)ut.c_str(), ",");
+		s = ":42IRC 366 " + c->getNick() + " * :End of NAMES list\r\n";
+		send(c->getFd(), s.c_str(), s.size(), 0);
 	}
 	else
 	{
-		s = "461 PART :Not enough parameters\r\n";
-		send(c->getFd(), s.c_str(), s.size(), 0);
-		return ;
-	}
-	std::string reason = ReplyCreator(mess, c, 1);
 
-	for (int i = 0; i < ctp.size(); i++)
-	{
-		if (channelExist(ctp[i]) == true)
+		for (int i = 0; i < v1.size(); i++)
 		{
-
-			if (c->isOnChannel(ctp[i]) == true)
+			if (channelExist(v1[i]) == true /*&& c->isOnChannel(v[i]) == true*/) //+ Channel is not secret
 			{
-				s = ":" + c->getFullIdentifier() + " PART " + ctp[i] + (reason.size() > 0 ? " " + reason : "\r\n");
-				Channel *ch = findChannel(ctp[i]);
-				for (std::vector<int>::const_iterator it = ch->getClients().begin(); it != ch->getClients().end(); it++)
-						send(*it, s.c_str(), s.size(), 0);
-				c->removeChannel(ctp[i]);
-				ch->removeClient(c->getFd());
-				if (ch->isAnOperator(c->getFd()))
-					ch->removeOperator(c->getFd());
-				if (ch->getClients().size() == 0)
-					deleteChannel(ch->getName());
+				Channel *ch = findChannel(v1[i]);
+				s = ":42IRC 353 " + c->getNick() + " " + (ch->isSecret() == false ? "= " : "@ ") + ch->getName() + " :";
+				std::vector<int> v = ch->getClients();
+				for (int i = 0; i < v.size(); i++)
+				{
+					Client *cl = findClient(v[i]);
+					if (i + 1 < v.size())
+						s+= (ch->isAnOperator(cl->getFd()) == true ? "@" + cl->getNick() : cl->getNick()) + " ";
+					else
+						s+= (ch->isAnOperator(cl->getFd()) == true ? "@" + cl->getNick() : cl->getNick()) + "\r\n";
+				}
+				s += ":42IRC 366 " + c->getNick() + " " + ch->getName() + " :End of NAMES list\r\n";
+				send(c->getFd(), s.c_str(), s.size(), 0);
 			}
 			else
 			{
-				s = ":42IRC 442 " + ctp[i] + " :You're not on that channel\r\n";
-				send(c->getFd(), s.c_str(), s.size(), 0);
-			}
-		}
-		else
-		{
-			s = ":42IRC 403 " + ctp[i] + " :No such channel\r\n";
-			send(c->getFd(), s.c_str(), s.size(), 0);
-		}
-	}
-
-}
-
-void	Server::privmsgCmd(Message *mess, Client *c)
-{
-	std::string ut = mess->params[0];
-	std::vector<std::string> target = ft_split((char*)ut.c_str(), ",");
-	std::string msg = ReplyCreator(mess, c, 1);
-
-	if (msg.size() < 2)
-		send(c->getFd(), ":42IRC 412:No text to send\r\n", 29, 0);
-	for (int i = 0; i < target.size(); i++)
-	{
-		if (target[i][0] != '#') //nick
-		{
-			int flag = 0;
-			std::string s;
-			for (int j = 0; j < _cVec.size(); j++)
-			{
-				if (!_cVec[j]->getNick().compare(target[i]))
-				{
-					s = ":" + c->getFullIdentifier() + " PRIVMSG " + target[i] + " " + msg;
-					send(_cVec[j]->getFd(), s.c_str(), s.size(), 0);
-					flag = 1;
-					break;
-				}
-			}
-			if (flag == 0)
-			{
-				s = ":42IRC 401 " + target[i] + " :No such nick/channel\r\n";
-				send(c->getFd(), s.c_str(), s.size(), 0);
-			}
-		}
-		else //channel
-		{
-			int flag = 0;
-			std::string s;
-			for (int j = 0; j < _chV.size(); j++)
-			{
-				if (!_chV[j]->getName().compare(target[i]) && c->isOnChannel(target[i]) == false)
-				{
-					flag = 1;
-					s = ":42IRC 404 " + target[i] + " :Cannot send to channel\r\n";
-					send(c->getFd(), s.c_str(), s.size(), 0);
-					break;
-				}
-				else if (!_chV[j]->getName().compare(target[i]) && c->isOnChannel(target[i]) == true)
-				{
-					s = ":" + c->getFullIdentifier() + " PRIVMSG " + target[i] + " " + msg;
-					for (std::vector<int>::const_iterator it = _chV[j]->getClients().begin(); it != _chV[j]->getClients().end(); it++)
-					{
-						if (*it != c->getFd())
-							send(*it, s.c_str(), s.size(), 0);
-					}
-					flag = 1;
-					break;
-				}
-			}
-			if (flag == 0)
-			{
-				s = ":42IRC 401 " + target[i] + " :No such nick/channel\r\n";
+				s = ":42IRC 366 " + c->getNick() + " " + v1[i] + " :End of NAMES list\r\n";
 				send(c->getFd(), s.c_str(), s.size(), 0);
 			}
 		}
 	}
 }
 
-void initializePartAll(Message *alt, Client *c)
-{
-	alt->command = "PART";
-	std::string s;
-	for (std::vector<std::string>::const_iterator it = c->getClientChannel().begin(); it != c->getClientChannel().end(); it++)
-	{
-		if (it + 1 != c->getClientChannel().end())
-			s+= *it + ",";
-		else
-			s+= *it;
-	}
-	alt->params.push_back(s);
-}
-
-void	Server::joinCmd(Message *mess, Client *c)
-{
-	if (!mess->params[0].compare("#0"))
-	{
-		Message alt;
-		initializePartAll(&alt, c);
-		partCmd(&alt, c);
-		return ;
-	}
-
-	if (!mess->params.size())
-	{
-		send(c->getFd(), "461 JOIN :Not enough parameters\r\n", 34, 0);
-		return ;
-	}
-	std::vector<std::string>	channels;
-	std::vector<std::string>	keys;
-
-	char ut[4096];
-	bzero(ut, 4096);
-	memcpy(ut, mess->params[0].c_str(), mess->params[0].size());
-	channels = ft_split(ut, ",");
-
-	bzero(ut, 4096);
-	memcpy(ut, mess->params[1].c_str(), mess->params[1].size());
-	if (ut[0] != 0)
-		keys = ft_split(ut, ",");
-
-	for (int i = 0; i < channels.size(); i++)
-	{
-		if (channelExist(channels[i]) == true)
-		{
-			Channel *ch = findChannel(channels[i]);
-			if (ch->getKey().size() == 0 || (i < keys.size() && keys[i].compare(ch->getKey()) == 0))
-			{
-				std::string s = ":" + c->getFullIdentifier() + " JOIN " + channels[i] + "\r\n";
-				send (c->getFd(), s.c_str(), s.size(), 0);
-				std::vector<int> clients = ch->getClients();
-				for (int i = 0; i < clients.size(); i++)
-					send(clients[i], s.c_str(), s.size(), 0);
-				ch->setNewClient(c->getFd());
-				c->setNewClientChannel(channels[i]);
-				sendChannelInformation(c, ch);
-			}
-			else
-			{
-				std::string s = ":42IRC 475 " + c->getNick() + " " + channels[i] + " :Cannot join channel (+k)\r\n";
-				send(c->getFd(), s.c_str(), s.size(), 0);
-			}
-		}
-		else
-		{
-			Channel *chan;
-
-			if (i < keys.size())
-				chan = new Channel(channels[i], keys[i]);
-			else
-				chan = new Channel(channels[i]);
-			
-			_chV.push_back(chan);
-			std::string s = ":" + c->getFullIdentifier() + " JOIN " + channels[i] + "\r\n";
-			send (c->getFd(), s.c_str(), s.size(), 0);
-			chan->setNewClient(c->getFd());
-			c->setNewClientChannel(channels[i]);
-			chan->setNewOperator(c->getFd());
-			sendChannelInformation(c, chan);
-			s.clear();
-			s = ":42IRC 324 " + c->getNick() + " " + chan->getName() + (i < keys.size() ? (" otnk " + chan->getKey() + "\r\n") : " otn\r\n");
-			send(c->getFd(), s.c_str(), s.size(), 0);
-		}
-	}
-	return ;
-
-}
-
-void	Server::sendChannelInformation(Client *c, Channel *ch)
+void	Server::nickCmd(Message *mess, Client *c)
 {
 	std::string s;
-
-	s = (ch->getTopic().size() > 0 ? (":42IRC 332 " + c->getNick() + " " + ch->getName() + " :" + ch->getTopic() + "\r\n") : (":42IRC 331 " + c->getNick() + " " + ch->getName() + " :No topic is set\r\n"));
-	send(c->getFd(), s.c_str(), s.size(), 0);
-
-	s.clear();
-	s = ":42IRC 353 " + c->getNick() + " " + (ch->isSecret() == false ? "= " : "@ ") + ch->getName() + " :";
-	std::vector<int> v = ch->getClients();
-	for (int i = 0; i < v.size(); i++)
+	if (checkNick(mess->params[0], c->getFd()))
 	{
-		Client *cl = findClient(v[i]);
-		if (i + 1 < v.size())
-			s+= (ch->isAnOperator(cl->getFd()) == true ? "@" + cl->getNick() : cl->getNick()) + " ";
-		else
-			s+= (ch->isAnOperator(cl->getFd()) == true ? "@" + cl->getNick() : cl->getNick()) + "\r\n";
+		s = ":" + c->getFullIdentifier() + " NICK " + mess->params[0] + "\r\n"; 
+		for (int i = 0; i < _cVec.size(); i++)
+			send(_cVec[i]->getFd(), s.c_str(), s.size(), 0);
+		c->setNick(mess->params[0]);
 	}
-	send(c->getFd(), s.c_str(), s.size(), 0);
-
-	s.clear();
-	s = ":42IRC 366 " + c->getNick() + " " + ch->getName() + " :End of NAMES list\r\n";
-	send(c->getFd(), s.c_str(), s.size(), 0);
-
 }
 
 Channel * Server::findChannel(std::string name) const
