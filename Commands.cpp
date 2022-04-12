@@ -333,3 +333,32 @@ void	Server::quitCmd(Message *mess, Client *c, fd_set *currentsockets)
 	}
 	closeClientConnection(c->getFd(), currentsockets);
 }
+
+
+void	Server::kickCmd(Message *mess, Client *c, fd_set *currentsockets)
+{
+	bool pre = 0;
+	if(!findChannel(mess->params[0]))
+	{
+		std::string s = ":42IRC 403 " + mess->params[0] + " :Channel not exist\r\n";
+				send(c->getFd(), s.c_str(), s.size(), 0);
+	}
+	Channel *ch = findChannel(mess->params[0]);
+	if (ch->isAnOperator(c->getFd()) == false)
+	{
+		std::string s = ":42IRC 482 " + mess->params[0] + " :You are not a channel operator\r\n";
+				send(c->getFd(), s.c_str(), s.size(), 0);
+	}
+	for (std::vector<int>::const_iterator i = ch->getClients().begin(); i != ch->getClients().end(); i++)
+	{
+		if (*i == c->getFd())
+			pre = 1;
+	}
+	if (pre == 0)
+	{
+			std::string s = ":42IRC 442 " + mess->params[0] + " :Not in channel\r\n";
+				send(c->getFd(), s.c_str(), s.size(), 0);
+	}
+
+	
+}

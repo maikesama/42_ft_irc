@@ -127,6 +127,7 @@ class Server
 		void	quitCmd(Message *mess, Client *c, fd_set *currentsockets);
 		void	nickCmd(Message *mess, Client *c);
 		void	namesCmd(Message *mess, Client *c);
+		void	kickCmd(Message *mess, Client *c, fd_set *currentsockets);
 
 	private :
 		int	port;

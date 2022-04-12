@@ -21,11 +21,12 @@ enum ecommands{
 	PART,
 	TOPIC,
 	NICK,
-	NAMES,// RPLNAM uno alla volta
+	NAMES,
+	KICK,
+	// RPLNAM uno alla volta
 	// MODE,
 	// KILL,
 	// BAN,
-	// KICK,
 	// OPER,
 	// ecc..
 };

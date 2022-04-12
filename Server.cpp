@@ -131,8 +131,10 @@ void	Server::MessageHandler(Message *mess, Client *c, fd_set *currentsockets)
 		Replyer(TOPIC, c, mess, currentsockets);
 	else if(!mess->command.compare("NICK"))
 		Replyer(NICK, c, mess, currentsockets);
-	else if(!mess->command.compare("NAMES") || !mess->command.compare("names"))
+	else if(!mess->command.compare("NAMES"))
 		Replyer(NAMES, c, mess, currentsockets);
+	else if(!mess->command.compare("KICK"))
+		Replyer(KICK, c, mess, currentsockets);
 }
 
 void	Server::Replyer(int cmd, Client *c, Message *mess, fd_set *currentsockets)
@@ -154,6 +156,8 @@ void	Server::Replyer(int cmd, Client *c, Message *mess, fd_set *currentsockets)
 		case NICK : nickCmd(mess, c); break;
 
 		case NAMES : namesCmd(mess, c); break;
+
+		case KICK : kickCmd(mess, c, currentsockets); break;
 
 		default : break;
 	}
