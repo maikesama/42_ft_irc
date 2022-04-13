@@ -23,7 +23,7 @@ enum ecommands{
 	NICK,
 	NAMES,// control if secret
 	LIST,
-	// MODE,
+	MODE,
 	// KILL,
 	// BAN,
 	// KICK,

@@ -31,7 +31,7 @@ void	Server::listCmd(Message *mess, Client *c)
 			}
 			else
 			{
-				s << ":42IRC 403 " + _chV[i]->getName() + " :No such channel\r\n";
+				s << ":42IRC 403 " + c->getNick()+ " " +_chV[i]->getName() + "\r\n";
 				send(c->getFd(), s.str().c_str(), s.str().size(), 0);
 				s.str("");
 				s.clear();
@@ -59,7 +59,7 @@ void	Server::listCmd(Message *mess, Client *c)
 			}
 			else
 			{
-				s << ":42IRC 403 " + v[i] + " :No such channel\r\n";
+				s << ":42IRC 403 " + c->getNick()+ " "  + v[i] + "\r\n";
 				send(c->getFd(), s.str().c_str(), s.str().size(), 0);
 				s.str("");
 				s.clear();
@@ -151,7 +151,7 @@ void Server::topicCmd(Message *mess, Client *c)
 		}
 		else
 		{
-			if (ch->isAnOperator(c->getFd()) == true) // || mode t on channel has been deactivated (to add)
+			if (ch->isAnOperator(c->getFd()) == true || ch->isMode('t') == false)
 			{
 				top.compare(":") == 0 ? ch->setTopic(NULL) : ch->setTopic(top.substr(1, std::string::npos));
 				for (std::vector<int>::const_iterator it = ch->getClients().begin(); it != ch->getClients().end(); it++)
@@ -172,7 +172,7 @@ void Server::topicCmd(Message *mess, Client *c)
 	}
 	else if (channelExist(channel) == false)
 	{
-		s = ":42IRC 403 " + channel + " :No such channel\r\n";
+		s = ":42IRC 403 " + c->getNick()+ " " + channel + "\r\n";
 		send(c->getFd(), s.c_str(), s.size(), 0);
 		return ;
 	}
@@ -228,7 +228,7 @@ void	Server::partCmd(Message *mess, Client *c)
 		}
 		else
 		{
-			s = ":42IRC 403 " + ctp[i] + " :No such channel\r\n";
+			s = ":42IRC 403 " + c->getNick()+ " " + ctp[i] + "\r\n";
 			send(c->getFd(), s.c_str(), s.size(), 0);
 		}
 	}
@@ -261,7 +261,7 @@ void	Server::privmsgCmd(Message *mess, Client *c)
 			}
 			if (flag == 0)
 			{
-				s = ":42IRC 401 " + target[i] + " :No such nick/channel\r\n";
+				s = ":42IRC 401 "+ c->getNick() + " " + target[i] + " :No such nick/channel\r\n";
 				send(c->getFd(), s.c_str(), s.size(), 0);
 			}
 		}
@@ -292,7 +292,7 @@ void	Server::privmsgCmd(Message *mess, Client *c)
 			}
 			if (flag == 0)
 			{
-				s = ":42IRC 401 " + target[i] + " :No such nick/channel\r\n";
+				s = ":42IRC 401 "+ c->getNick() + " " + target[i] + " :No such nick/channel\r\n";
 				send(c->getFd(), s.c_str(), s.size(), 0);
 			}
 		}
@@ -381,6 +381,7 @@ void	Server::joinCmd(Message *mess, Client *c)
 			sendChannelInformation(c, chan);
 			s.clear();
 			s = ":42IRC 324 " + c->getNick() + " " + chan->getName() + (i < keys.size() ? (" otnk " + chan->getKey() + "\r\n") : " otn\r\n");
+			chan->setModes(i < keys.size() ? "+otnk" : "+otn");
 			send(c->getFd(), s.c_str(), s.size(), 0);
 		}
 	}

@@ -82,9 +82,18 @@ class Server
 			return false;
 		}
 
+		Client * findClient(std::string name) const
+		{
+			for (int i = 0; i < _cVec.size(); i++)
+			{
+				if (name.compare(_cVec[i]->getNick()) == 0)
+					return _cVec[i];
+			}
+			return NULL;
+		}
+
 		const std::string & getPassword(void) const { return this->Password; };
-
-
+		
 		// Anything else in the Server.cpp file
 
 		void	launch();
@@ -114,6 +123,7 @@ class Server
 		//check login information
 		int		checkNick(std::string nick, int fd);
 		int		checkUser(std::string user, int fd);
+		int		checkModes(char c);
 
 		void	login(Client *c, int event_fd, std::vector<std::string> v);
 		void	Replyer(int cmd, Client *c, Message *mess, fd_set *currentsockets);
@@ -129,6 +139,7 @@ class Server
 		void	nickCmd(Message *mess, Client *c);
 		void	namesCmd(Message *mess, Client *c);
 		void	listCmd(Message *mess, Client *c);
+		void	modeCmd(Message *mess, Client *c);
 
 	private :
 		int	port;

@@ -135,6 +135,8 @@ void	Server::MessageHandler(Message *mess, Client *c, fd_set *currentsockets)
 		Replyer(NAMES, c, mess, currentsockets);
 	else if(!mess->command.compare("LIST"))
 		Replyer(LIST, c, mess, currentsockets);
+	else if(!mess->command.compare("MODE"))
+		Replyer(MODE, c, mess, currentsockets);
 }
 
 void	Server::Replyer(int cmd, Client *c, Message *mess, fd_set *currentsockets)
@@ -158,6 +160,8 @@ void	Server::Replyer(int cmd, Client *c, Message *mess, fd_set *currentsockets)
 		case NAMES : namesCmd(mess, c); break;
 
 		case LIST : listCmd(mess, c); break;
+
+		case MODE : modeCmd(mess, c); break;
 
 		default : break;
 	}
@@ -307,8 +311,6 @@ void	Server::closeClientConnection(int fd, fd_set *currentsocket)
 
 Client * Server::findClient(int fd) const
 {
-	Client *c;
-
 	for (int i = 0; i < _cVec.size(); i++)
 	{
 		if (_cVec[i]->getFd() == fd)
@@ -316,3 +318,101 @@ Client * Server::findClient(int fd) const
 	}
 	return NULL;
 }
+
+int		Server::checkModes(char c)
+{
+	std::string availableModes = "boktmvnls";
+	if (availableModes.find(c) != std::string::npos)
+		return 1;
+	return 0;
+}
+
+void	Server::modeCmd(Message *mess, Client *c)
+{
+	std::string s;
+	std::string target = mess->params[0];
+	if (mess->params.size() >= 2)
+	{
+		std::string mta = mess->params[1];
+		if (mta[0] != '+' && mta[0] != '-')
+			return ;
+		std::string sign = mta.substr(0, 1);
+		mta = mta.substr(1, std::string::npos);
+		if (target[0] == '#')
+		{
+			if (channelExist(target) == true)
+			{
+				Channel *ch = findChannel(target);
+				if (ch->isAnOperator(c->getFd()) == true)
+				{
+					for (int i = 0; i < mta.size(); i++)
+					{
+						if (checkModes(mta[i]))
+						{
+							ch->setModes(sign + mta[i]);
+							s = sign + mta[i];
+							if (s.compare("+s") == 0)
+								ch->setSecret(true);
+							else if (s.compare("-s") == 0)
+								ch->setSecret(false);
+							s.clear(); 
+							s = ":" + c->getFullIdentifier() + " MODE " + target + " :" + sign + mta[i] + "\r\n";
+							send(c->getFd(), s.c_str(), s.size(), 0);
+							s.clear();
+						}
+						else
+						{
+							s = ":42IRC 501 " + c->getNick() + " :Unkown MODE flag\r\n";
+							send(c->getFd(), s.c_str(), s.size(), 0);
+							s.clear();
+						}
+					}
+				}
+				else
+				{
+					s = ":42IRC 482 " + c->getNick() + ch->getName() + " :You're not an operator\r\n";
+					send(c->getFd(), s.c_str(), s.size(), 0);
+					return ;
+				}
+			}
+			else
+			{
+				s = ":42IRC 403 " + c->getNick() + target + "\r\n";
+				send(c->getFd(), s.c_str(), s.size(), 0);
+				return ;
+			}
+		}
+		// else if (findClient(target) != NULL)
+		// {
+		// 	The only possible mode will is going to be -o! For all the other mode send RPL 501 (First we need to set server operator)
+		// }
+		else if (findClient(target) == NULL)
+		{
+			s = ":42IRC 401 "+ c->getNick() + " " + target + " :No such nick/channel\r\n";
+			send(c->getFd(), s.c_str(), s.size(), 0);
+		}
+	}
+	else if (target[0] == '#' && channelExist(target) == true)
+	{
+		Channel *ch = findChannel(target);
+		s = ":42IRC 324 " + c->getNick() + " " + target + " " + ch->getModes() + "\r\n";
+		send(c->getFd(), s.c_str(), s.size(), 0);
+	}
+	else if (target[0] == '#' && channelExist(target) == false)
+	{
+		s = ":42IRC 403 " + c->getNick() + target + "\r\n";
+		send(c->getFd(), s.c_str(), s.size(), 0);
+		return ;
+	}
+	// else if (findClient(target) != NULL)
+	// {
+	// 	Client *c = findClient(target);
+	//		control if is a server operator and reply if it is or not with RPL_UMODEIS(221);
+	// }
+	else if (findClient(target) == NULL)
+	{
+		s = ":42IRC 401 " + c->getNick() + " " +target + " :No such nick/channel\r\n";
+		send(c->getFd(), s.c_str(), s.size(), 0);
+	}
+}
+
