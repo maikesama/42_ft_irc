@@ -47,7 +47,7 @@ class Channel
 
 		bool	isAnOperator(int fd)
 		{
-			if (modes.find("o") != std::string::npos)
+			if (modes.find("o") == std::string::npos)
 				return true;
 			for (std::vector<int>::iterator it = operators.begin(); it != operators.end(); it++)
 			{

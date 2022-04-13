@@ -86,21 +86,24 @@ void	Server::namesCmd(Message *mess, Client *c)
 
 		for (int i = 0; i < v1.size(); i++)
 		{
-			if (channelExist(v1[i]) == true /*&& c->isOnChannel(v[i]) == true*/) //+ Channel is not secret
+			if (channelExist(v1[i]) == true)
 			{
 				Channel *ch = findChannel(v1[i]);
-				s = ":42IRC 353 " + c->getNick() + " " + (ch->isSecret() == false ? "= " : "@ ") + ch->getName() + " :";
-				std::vector<int> v = ch->getClients();
-				for (int i = 0; i < v.size(); i++)
+				if (ch->isMode('s') == false || c->isOnChannel(v1[i]) == true)
 				{
-					Client *cl = findClient(v[i]);
-					if (i + 1 < v.size())
-						s+= (ch->isAnOperator(cl->getFd()) == true ? "@" + cl->getNick() : cl->getNick()) + " ";
-					else
-						s+= (ch->isAnOperator(cl->getFd()) == true ? "@" + cl->getNick() : cl->getNick()) + "\r\n";
+					s = ":42IRC 353 " + c->getNick() + " " + (ch->isSecret() == false ? "= " : "@ ") + ch->getName() + " :";
+					std::vector<int> v = ch->getClients();
+					for (int i = 0; i < v.size(); i++)
+					{
+						Client *cl = findClient(v[i]);
+						if (i + 1 < v.size())
+							s+= (ch->isAnOperator(cl->getFd()) == true ? "@" + cl->getNick() : cl->getNick()) + " ";
+						else
+							s+= (ch->isAnOperator(cl->getFd()) == true ? "@" + cl->getNick() : cl->getNick()) + "\r\n";
+					}
+					s += ":42IRC 366 " + c->getNick() + " " + ch->getName() + " :End of NAMES list\r\n";
+					send(c->getFd(), s.c_str(), s.size(), 0);
 				}
-				s += ":42IRC 366 " + c->getNick() + " " + ch->getName() + " :End of NAMES list\r\n";
-				send(c->getFd(), s.c_str(), s.size(), 0);
 			}
 			else
 			{
@@ -378,11 +381,9 @@ void	Server::joinCmd(Message *mess, Client *c)
 			chan->setNewClient(c->getFd());
 			c->setNewClientChannel(channels[i]);
 			chan->setNewOperator(c->getFd());
+			std::cout << "marcelo"<< std::endl;
 			sendChannelInformation(c, chan);
-			s.clear();
-			s = ":42IRC 324 " + c->getNick() + " " + chan->getName() + (i < keys.size() ? (" otnk " + chan->getKey() + "\r\n") : " otn\r\n");
 			chan->setModes(i < keys.size() ? "+otnk" : "+otn");
-			send(c->getFd(), s.c_str(), s.size(), 0);
 		}
 	}
 	return ;
