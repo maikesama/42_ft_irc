@@ -133,6 +133,8 @@ void	Server::MessageHandler(Message *mess, Client *c, fd_set *currentsockets)
 		Replyer(NICK, c, mess, currentsockets);
 	else if(!mess->command.compare("NAMES") || !mess->command.compare("names"))
 		Replyer(NAMES, c, mess, currentsockets);
+	else if(!mess->command.compare("LIST"))
+		Replyer(LIST, c, mess, currentsockets);
 }
 
 void	Server::Replyer(int cmd, Client *c, Message *mess, fd_set *currentsockets)
@@ -155,60 +157,9 @@ void	Server::Replyer(int cmd, Client *c, Message *mess, fd_set *currentsockets)
 
 		case NAMES : namesCmd(mess, c); break;
 
+		case LIST : listCmd(mess, c); break;
+
 		default : break;
-	}
-}
-
-void	Server::namesCmd(Message *mess, Client *c)
-{
-	std::string ut = mess->params[0];
-	std::vector<std::string> v1 = ft_split((char*)ut.c_str(), ",");
-
-	std::string s;
-	if (!v1.size())
-	{
-		s = ":42IRC 366 " + c->getNick() + " * :End of NAMES list\r\n";
-		send(c->getFd(), s.c_str(), s.size(), 0);
-	}
-	else
-	{
-
-		for (int i = 0; i < v1.size(); i++)
-		{
-			if (channelExist(v1[i]) == true /*&& c->isOnChannel(v[i]) == true*/) //+ Channel is not secret
-			{
-				Channel *ch = findChannel(v1[i]);
-				s = ":42IRC 353 " + c->getNick() + " " + (ch->isSecret() == false ? "= " : "@ ") + ch->getName() + " :";
-				std::vector<int> v = ch->getClients();
-				for (int i = 0; i < v.size(); i++)
-				{
-					Client *cl = findClient(v[i]);
-					if (i + 1 < v.size())
-						s+= (ch->isAnOperator(cl->getFd()) == true ? "@" + cl->getNick() : cl->getNick()) + " ";
-					else
-						s+= (ch->isAnOperator(cl->getFd()) == true ? "@" + cl->getNick() : cl->getNick()) + "\r\n";
-				}
-				s += ":42IRC 366 " + c->getNick() + " " + ch->getName() + " :End of NAMES list\r\n";
-				send(c->getFd(), s.c_str(), s.size(), 0);
-			}
-			else
-			{
-				s = ":42IRC 366 " + c->getNick() + " " + v1[i] + " :End of NAMES list\r\n";
-				send(c->getFd(), s.c_str(), s.size(), 0);
-			}
-		}
-	}
-}
-
-void	Server::nickCmd(Message *mess, Client *c)
-{
-	std::string s;
-	if (checkNick(mess->params[0], c->getFd()))
-	{
-		s = ":" + c->getFullIdentifier() + " NICK " + mess->params[0] + "\r\n"; 
-		for (int i = 0; i < _cVec.size(); i++)
-			send(_cVec[i]->getFd(), s.c_str(), s.size(), 0);
-		c->setNick(mess->params[0]);
 	}
 }
 

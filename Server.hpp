@@ -11,6 +11,7 @@ struct Message;
 #include <ctime>
 
 
+
 class Client;
 
 class Server
@@ -127,6 +128,7 @@ class Server
 		void	quitCmd(Message *mess, Client *c, fd_set *currentsockets);
 		void	nickCmd(Message *mess, Client *c);
 		void	namesCmd(Message *mess, Client *c);
+		void	listCmd(Message *mess, Client *c);
 
 	private :
 		int	port;

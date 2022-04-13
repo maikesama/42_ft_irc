@@ -15,13 +15,14 @@ struct Message
 
 enum ecommands{
 	PING,
-	JOIN,// RPLNAM uno alla volta
+	JOIN,//control on mode
 	QUIT,
 	PRIVMSG,
 	PART,
 	TOPIC,
 	NICK,
-	NAMES,// RPLNAM uno alla volta
+	NAMES,// control if secret
+	LIST,
 	// MODE,
 	// KILL,
 	// BAN,

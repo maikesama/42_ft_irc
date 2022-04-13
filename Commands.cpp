@@ -15,6 +15,114 @@ void	clearMess(Message *mess)
 	mess->params.clear();
 }
 
+void	Server::listCmd(Message *mess, Client *c)
+{
+	std::ostringstream s;
+	if (!mess->params.size())
+	{
+		for (int i = 0; i < _chV.size(); i++)
+		{
+			if (_chV[i]->isSecret() == false)
+			{
+				s << ":42IRC" << " 322 " + c->getNick() + " " << _chV[i]->getName() << " " << _chV[i]->getClients().size() << " :" << (_chV[i]->getTopic().size() > 0 ? _chV[i]->getTopic() + "\r\n" : "No topic is set\r\n");
+				send(c->getFd(), s.str().c_str(), s.str().size(), 0);
+				s.str("");
+				s.clear();
+			}
+			else
+			{
+				s << ":42IRC 403 " + _chV[i]->getName() + " :No such channel\r\n";
+				send(c->getFd(), s.str().c_str(), s.str().size(), 0);
+				s.str("");
+				s.clear();
+			}
+		}
+		s << ":" + c->getFullIdentifier() + " 323 :End of /LIST\r\n";
+		send(c->getFd(), s.str().c_str(), s.str().size(), 0);
+	}
+	else
+	{
+		std::string ut = mess->params[0];
+		std::vector<std::string> v = ft_split((char*)ut.c_str(), ",");
+		for (int i = 0; i < v.size(); i++)
+		{
+			if (channelExist(v[i]) == true)
+			{
+				Channel *ch = findChannel(v[i]);
+				if (ch->isSecret() == false)
+				{
+					s << ":42IRC 322 " + c->getNick() + " " +  ch->getName() + " " << ch->getClients().size() << " :" + (ch->getTopic().size() > 0 ? ch->getTopic() + "\r\n" : "No topic is set\r\n");
+					send(c->getFd(), s.str().c_str(), s.str().size(), 0);
+					s.str("");
+					s.clear();
+				}
+			}
+			else
+			{
+				s << ":42IRC 403 " + v[i] + " :No such channel\r\n";
+				send(c->getFd(), s.str().c_str(), s.str().size(), 0);
+				s.str("");
+				s.clear();
+			}
+		}
+		s << ":" + c->getFullIdentifier() + " 323 :End of /LIST\r\n";
+		send(c->getFd(), s.str().c_str(), s.str().size(), 0);
+	}
+}
+
+void	Server::namesCmd(Message *mess, Client *c)
+{
+	std::string ut = mess->params[0];
+	std::vector<std::string> v1 = ft_split((char*)ut.c_str(), ",");
+
+	std::string s;
+	if (!v1.size())
+	{
+		s = ":42IRC 366 " + c->getNick() + " * :End of NAMES list\r\n";
+		send(c->getFd(), s.c_str(), s.size(), 0);
+	}
+	else
+	{
+
+		for (int i = 0; i < v1.size(); i++)
+		{
+			if (channelExist(v1[i]) == true /*&& c->isOnChannel(v[i]) == true*/) //+ Channel is not secret
+			{
+				Channel *ch = findChannel(v1[i]);
+				s = ":42IRC 353 " + c->getNick() + " " + (ch->isSecret() == false ? "= " : "@ ") + ch->getName() + " :";
+				std::vector<int> v = ch->getClients();
+				for (int i = 0; i < v.size(); i++)
+				{
+					Client *cl = findClient(v[i]);
+					if (i + 1 < v.size())
+						s+= (ch->isAnOperator(cl->getFd()) == true ? "@" + cl->getNick() : cl->getNick()) + " ";
+					else
+						s+= (ch->isAnOperator(cl->getFd()) == true ? "@" + cl->getNick() : cl->getNick()) + "\r\n";
+				}
+				s += ":42IRC 366 " + c->getNick() + " " + ch->getName() + " :End of NAMES list\r\n";
+				send(c->getFd(), s.c_str(), s.size(), 0);
+			}
+			else
+			{
+				s = ":42IRC 366 " + c->getNick() + " " + v1[i] + " :End of NAMES list\r\n";
+				send(c->getFd(), s.c_str(), s.size(), 0);
+			}
+		}
+	}
+}
+
+void	Server::nickCmd(Message *mess, Client *c)
+{
+	std::string s;
+	if (checkNick(mess->params[0], c->getFd()))
+	{
+		s = ":" + c->getFullIdentifier() + " NICK " + mess->params[0] + "\r\n"; 
+		for (int i = 0; i < _cVec.size(); i++)
+			send(_cVec[i]->getFd(), s.c_str(), s.size(), 0);
+		c->setNick(mess->params[0]);
+	}
+}
+
 void Server::topicCmd(Message *mess, Client *c)
 {
 	if (mess->params[0].size() == 0)
