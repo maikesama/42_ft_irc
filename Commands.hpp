@@ -15,7 +15,7 @@ struct Message
 
 enum ecommands{
 	PING,
-	JOIN,//control on mode invite only
+	JOIN,
 	QUIT,
 	PRIVMSG,
 	PART,
@@ -23,11 +23,11 @@ enum ecommands{
 	NICK,
 	NAMES,
 	LIST,
-	MODE,
+	MODE, // ADD kick instead of part on the ban
+	OPER,
+	INVITE,
+	KICK,
 	// KILL,
-	// BAN,
-	// KICK,
-	// OPER,
 	// ecc..
 };
 

@@ -99,6 +99,17 @@ class Server
 		void	launch();
 
 		Client * findClient(int fd) const;
+		Client * findClient(std::string fn, int x) const
+		{
+			x = 1;
+			for (int i = 0; i < _cVec.size(); i++)
+			{
+				if (!_cVec[i]->getFullIdentifier().compare(fn))
+					return _cVec[i];
+			}
+			return NULL;
+		}
+
 		Channel * findChannel(std::string name) const;
 
 		void	sendChannelInformation(Client *c, Channel *ch);
@@ -120,10 +131,37 @@ class Server
 			}
 		}
 
-		//check login information
+		bool	isServerOp(int fd) const
+		{
+			for (std::vector<int>::const_iterator it = serverOperator.begin(); it != serverOperator.end(); it++)
+			{
+				if (*it == fd)
+					return true;
+			}
+			return false;
+		}
+
+		void	removeServerOp(int fd)
+		{
+			for (std::vector<int>::iterator it = serverOperator.begin(); it != serverOperator.end(); it++)
+			{
+				if (*it == fd)
+					serverOperator.erase(it);
+				if (it == serverOperator.end())
+					break;
+			}
+		}
+
+		void	addServerOp(int fd)
+		{
+			serverOperator.push_back(fd);
+		}
+
+		//check
 		int		checkNick(std::string nick, int fd);
 		int		checkUser(std::string user, int fd);
 		int		checkModes(char c);
+		void	switchMode(char m, std::string sign, std::vector<std::string> mp, int* pi, Channel *ch, Client *c);
 
 		void	login(Client *c, int event_fd, std::vector<std::string> v);
 		void	Replyer(int cmd, Client *c, Message *mess, fd_set *currentsockets);
@@ -140,12 +178,28 @@ class Server
 		void	namesCmd(Message *mess, Client *c);
 		void	listCmd(Message *mess, Client *c);
 		void	modeCmd(Message *mess, Client *c);
+		void	operCmd(Message *mess, Client *c);
+		void	inviteCmd(Message *mess, Client *c);
+		void	kickCmd(Message *mess, Client *c);
+
+
+
+		void	broadcastToChan(Channel *ch, std::string msg, Client *c, bool excludeMe)
+		{
+			for (std::vector<int>::const_iterator it = ch->getClients().begin(); it != ch->getClients().end(); it++)
+			{
+				if (*it != c->getFd() || !excludeMe)
+					send(*it, msg.c_str(), msg.size(), 0);
+			}
+		}
 
 	private :
 		int	port;
 		std::string Password;
 		std::vector<Client*> _cVec;
 		std::vector<Channel*> _chV;
+
+		std::vector<int> serverOperator;
 
 
 		std::string	CreationTime;

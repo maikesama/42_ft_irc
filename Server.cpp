@@ -137,6 +137,12 @@ void	Server::MessageHandler(Message *mess, Client *c, fd_set *currentsockets)
 		Replyer(LIST, c, mess, currentsockets);
 	else if(!mess->command.compare("MODE"))
 		Replyer(MODE, c, mess, currentsockets);
+	else if(!mess->command.compare("OPER"))
+		Replyer(OPER, c, mess, currentsockets);
+	else if(!mess->command.compare("INVITE"))
+		Replyer(INVITE, c, mess, currentsockets);
+	else if(!mess->command.compare("KICK"))
+		Replyer(KICK, c, mess, currentsockets);
 }
 
 void	Server::Replyer(int cmd, Client *c, Message *mess, fd_set *currentsockets)
@@ -163,9 +169,79 @@ void	Server::Replyer(int cmd, Client *c, Message *mess, fd_set *currentsockets)
 
 		case MODE : modeCmd(mess, c); break;
 
+		case OPER : operCmd(mess, c); break;
+
+		case INVITE : inviteCmd(mess, c); break;
+
+		case KICK : kickCmd(mess, c); break;
+
 		default : break;
 	}
 }
+
+void	Server::kickCmd(Message *mess, Client *c)
+{
+	std::string s;
+	if (mess->params.size() < 2)
+	{
+		s = ":42IRC 461 INVITE :Not enough parameters\r\n";
+		send(c->getFd(), s.c_str(), s.size(), 0);
+		return ;
+	}
+	std::string	chan = mess->params[0];
+	std::string	ut = mess->params[1];
+	std::vector<std::string> user = ft_split((char*)ut.c_str(), ",");
+	if (findChannel(chan) == NULL)
+	{
+		s = ":42IRC 403 " + c->getNick() + " " + chan + "\r\n";
+		send(c->getFd(), s.c_str(), s.size(), 0);
+		return ;
+	}
+	if (c->isOnChannel(chan) == false)
+	{
+		s = ":42IRC 442 "+ chan + " :You're not on that channel\r\n";
+		send(c->getFd(), s.c_str(), s.size(), 0);
+		return ;
+	}
+	std::string	reason;
+	if (mess->params.size() > 2)
+	{
+		for (int i = 2; i < mess->params.size(); i++)
+		{
+			if (i + 1 < mess->params.size())
+				reason += mess->params[i] + " ";
+			else
+				reason += mess->params[i];
+		}
+	}
+	Channel *ch = findChannel(chan);
+	if (ch->isAnOperator(c->getFd()) == false && isServerOp(c->getFd()) == false)
+	{
+		s = ":42IRC 482 " + c->getNick() + " " + ch->getName() + " :You're not an operator\r\n";
+		send(c->getFd(), s.c_str(), s.size(), 0);
+		return ;
+	}
+
+	for (std::vector<std::string>::iterator it = user.begin(); it != user.end(); it++)
+	{
+		Client *ctk = findClient(*it);
+		if (ctk != NULL && ctk->isOnChannel(chan) == true)
+		{
+			s = ":" + c->getFullIdentifier() + " KICK " + chan + " " + *it + " " + (reason.size() > 0 ? reason : ":We don't like you") + "\r\n";
+			broadcastToChan(ch, s, c, false);
+			ctk->removeChannel(chan);
+			ch->removeClient(ctk->getFd());
+			if (ch->isAnOperator(ctk->getFd()))
+				ch->removeOperator(ctk->getFd());
+		}
+		else
+		{
+			s = ":42IRC 441 " + c->getNick() + " " + ctk->getNick() + " " + ch->getName() + " :They aren't on that channel\r\n";
+			send(c->getFd(), s.c_str(), s.size(), 0);
+		}
+	}
+}
+
 
 Channel * Server::findChannel(std::string name) const
 {
@@ -241,7 +317,7 @@ void	Server::login(Client *c, int event_fd, std::vector<std::string> v)
 		RPL << ":42IRC 001 " << c->getNick() << " :Welcome to the 42IRC Network, " << c->getNick() << "!" << c->getUsername() << "@" << c->getHostAddress() <<"\r\n"
 		<<":42IRC 002 " << c->getNick() << " :Your host is 42IRC, running version 1.2\r\n"
 		<<":42IRC 003 " << c->getNick() << " :This server was created " << getCreationTime() << "\r\n"
-		<<":42IRC 004 " << c->getNick() << " 42IRC 1.2 o boktmvnls ovkl\r\n";
+		<<":42IRC 004 " << c->getNick() << " 42IRC 1.2 o obtksnmv okv\r\n";
 		send(event_fd, RPL.str().c_str(), RPL.str().size(), 0);
 		c->setIsRegistered(true);
 	}
@@ -293,7 +369,7 @@ int		Server::checkNick(std::string nick, int fd)
 
 void	Server::closeClientConnection(int fd, fd_set *currentsocket)
 {
-	std::cout << "Client has disconnected" <<std::endl;
+	std::cout << "Client has disconnected" << std::endl;
 	int i = 0;
 	for (std::vector<Client*>::iterator it = _cVec.begin(); it != _cVec.end(); it++)
 	{
@@ -305,6 +381,8 @@ void	Server::closeClientConnection(int fd, fd_set *currentsocket)
 		}
 		i++;
 	}
+	if(isServerOp(fd) == true)
+		removeServerOp(fd);
 	close(fd);
 	FD_CLR(fd, currentsocket);
 }
@@ -318,101 +396,3 @@ Client * Server::findClient(int fd) const
 	}
 	return NULL;
 }
-
-int		Server::checkModes(char c)
-{
-	std::string availableModes = "boktmvnls";
-	if (availableModes.find(c) != std::string::npos)
-		return 1;
-	return 0;
-}
-
-void	Server::modeCmd(Message *mess, Client *c)
-{
-	std::string s;
-	std::string target = mess->params[0];
-	if (mess->params.size() >= 2)
-	{
-		std::string mta = mess->params[1];
-		if (mta[0] != '+' && mta[0] != '-')
-			return ;
-		std::string sign = mta.substr(0, 1);
-		mta = mta.substr(1, std::string::npos);
-		if (target[0] == '#')
-		{
-			if (channelExist(target) == true)
-			{
-				Channel *ch = findChannel(target);
-				if (ch->isAnOperator(c->getFd()) == true)
-				{
-					for (int i = 0; i < mta.size(); i++)
-					{
-						if (checkModes(mta[i]))
-						{
-							ch->setModes(sign + mta[i]);
-							s = sign + mta[i];
-							if (s.compare("+s") == 0)
-								ch->setSecret(true);
-							else if (s.compare("-s") == 0)
-								ch->setSecret(false);
-							s.clear(); 
-							s = ":" + c->getFullIdentifier() + " MODE " + target + " :" + sign + mta[i] + "\r\n";
-							send(c->getFd(), s.c_str(), s.size(), 0);
-							s.clear();
-						}
-						else
-						{
-							s = ":42IRC 501 " + c->getNick() + " :Unkown MODE flag\r\n";
-							send(c->getFd(), s.c_str(), s.size(), 0);
-							s.clear();
-						}
-					}
-				}
-				else
-				{
-					s = ":42IRC 482 " + c->getNick() + ch->getName() + " :You're not an operator\r\n";
-					send(c->getFd(), s.c_str(), s.size(), 0);
-					return ;
-				}
-			}
-			else
-			{
-				s = ":42IRC 403 " + c->getNick() + target + "\r\n";
-				send(c->getFd(), s.c_str(), s.size(), 0);
-				return ;
-			}
-		}
-		// else if (findClient(target) != NULL)
-		// {
-		// 	The only possible mode will is going to be -o! For all the other mode send RPL 501 (First we need to set server operator)
-		// }
-		else if (findClient(target) == NULL)
-		{
-			s = ":42IRC 401 "+ c->getNick() + " " + target + " :No such nick/channel\r\n";
-			send(c->getFd(), s.c_str(), s.size(), 0);
-		}
-	}
-	else if (target[0] == '#' && channelExist(target) == true)
-	{
-		Channel *ch = findChannel(target);
-		s = ":42IRC 324 " + c->getNick() + " " + target + " " + ch->getModes() + "\r\n";
-		send(c->getFd(), s.c_str(), s.size(), 0);
-	}
-	else if (target[0] == '#' && channelExist(target) == false)
-	{
-		s = ":42IRC 403 " + c->getNick() + target + "\r\n";
-		send(c->getFd(), s.c_str(), s.size(), 0);
-		return ;
-	}
-	// else if (findClient(target) != NULL)
-	// {
-	// 	Client *c = findClient(target);
-	//		control if is a server operator and reply if it is or not with RPL_UMODEIS(221);
-	// }
-	else if (findClient(target) == NULL)
-	{
-		s = ":42IRC 401 " + c->getNick() + " " +target + " :No such nick/channel\r\n";
-		send(c->getFd(), s.c_str(), s.size(), 0);
-	}
-}
-

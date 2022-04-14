@@ -7,8 +7,8 @@
 class Channel
 {
 	public :
-		Channel(std::string name) : _name(name), secret(false) {};
-		Channel(std::string name, std::string key) : _name(name), _key(key), secret(false) {}; 
+		Channel(std::string name) : _name(name) {};
+		Channel(std::string name, std::string key) : _name(name), _key(key) {}; 
 		~Channel() {};
 
 
@@ -64,7 +64,7 @@ class Channel
 			return false;
 		}
 
-		void	setSecret(bool is) { secret = is; }
+		void	setKey(std::string k) {_key = k; }
 		void	setTopic(std::string top) { topic = top; }
 		void	setModes(std::string md)
 		{
@@ -89,6 +89,32 @@ class Channel
 			}
 		}
 
+		void	removeBan(const std::string & name)
+		{
+			for (std::vector<std::string>::iterator it = banList.begin(); it != banList.end(); it++)
+			{
+				if (!name.compare(*it))
+					banList.erase(it);
+				if (it == banList.end())
+					break;
+			}
+		}
+
+		bool	isBanned(const std::string & name)
+		{
+			for (std::vector<std::string>::iterator it = banList.begin(); it != banList.end(); it++)
+			{
+				if (!name.compare(*it))
+					return true;
+			}
+			return false;
+		}
+
+		void	addBanned(const std::string & name)
+		{
+			banList.push_back(name);
+		}
+
 		const std::vector<int> & getClients() const { return _fd; }
 
 		const std::string & getName() const { return _name; }
@@ -99,7 +125,29 @@ class Channel
 
 		const std::string & getTopic() {return topic;}
 
-		bool isSecret() {return secret;}
+		bool isSecret() { return isMode('s'); }
+
+		void	CanTalk(int fd){ canTalk.push_back(fd); }
+		void	CantTalk(int fd)
+		{
+			for (std::vector<int>::const_iterator it = canTalk.begin(); it != canTalk.end(); it++)
+			{
+				if (*it == fd)
+					canTalk.erase(it);
+				if (it == canTalk.end())
+					break;
+			}
+		}
+
+		bool	canITalk(int fd)
+		{
+			for (std::vector<int>::const_iterator it = canTalk.begin(); it != canTalk.end(); it++)
+			{
+				if (*it == fd)
+					return true;
+			}
+			return false;
+		}
 
 	private :
 		std::string _name;
@@ -107,10 +155,11 @@ class Channel
 		std::string _key;
 		std::string topic;
 
-		bool secret;
-
 		std::vector<int> operators;
 		std::string modes;
+
+		std::vector<std::string> banList;
+		std::vector<int> canTalk;
 
 };
 
