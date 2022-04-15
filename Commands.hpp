@@ -18,17 +18,19 @@ enum ecommands{
 	JOIN,
 	QUIT,
 	PRIVMSG,
+	NOTICE,
 	PART,
 	TOPIC,
 	NICK,
 	NAMES,
 	LIST,
-	MODE, // ADD kick instead of part on the ban
+	MODE,
 	OPER,
 	INVITE,
 	KICK,
-	// KILL,
-	// ecc..
+	KILL,
+	WHO,
+	INFO,
 };
 
 void	initializeMess(Message *mess, std::vector<std::string> v);

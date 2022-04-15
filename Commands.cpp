@@ -15,6 +15,183 @@ void	clearMess(Message *mess)
 	mess->params.clear();
 }
 
+void	Server::whoCmd(Message *mess, Client *c)
+{
+	std::string s;
+	if (mess->params.size() == 0 || (mess->params.size() == 1 && (!mess->params[0].compare("*") || !mess->params[0].compare("0"))))
+	{
+		for (int i = 0; i < _cVec.size(); i++)
+		{
+			if (_cVec[i]->getFd() != c->getFd() && _cVec[i]->haveChannelInCommon(c) == false)
+			{
+				s = ":42IRC 352 " + c->getNick() + " * " + _cVec[i]->getUsername() + " " + _cVec[i]->getHostAddress() + " 42IRC " + _cVec[i]->getNick() + (isServerOp(_cVec[i]->getFd()) == true ? " H* " : " H ") + " :0 undefined\r\n";
+				send(c->getFd(), s.c_str(), s.size(), 0);
+				s.clear();				
+			}
+		}
+		s = ":42IRC 315 " + c->getNick() + " * :End of WHO list\r\n";
+		send(c->getFd(), s.c_str(), s.size(), 0);
+		return ;
+	}
+	else if (mess->params.size() == 1 && mess->params[0][0] == '#' && channelExist(mess->params[0]) == true)
+	{
+		Channel *ch = findChannel(mess->params[0]);
+		for (std::vector<int>::const_iterator it = ch->getClients().begin(); it != ch->getClients().end(); it++)
+		{
+			if (*it != c->getFd())
+			{
+				Client *cl = findClient(*it);
+				s = ":42IRC 352 " + c->getNick() + " * " + cl->getUsername() + " " + cl->getHostAddress() + " 42IRC " + cl->getNick() + (isServerOp(cl->getFd()) == true ? " H*" : " H") + (ch->isAnOperator(cl->getFd()) ? "@" : "") + (ch->canITalk(c->getFd()) ? "+" : "") + " :0 undefined\r\n";
+				send(c->getFd(), s.c_str(), s.size(), 0);
+				s.clear();
+			}
+		}
+		s = ":42IRC 315 " + c->getNick() + " " + ch->getName() +" :End of WHO list\r\n";
+		send(c->getFd(), s.c_str(), s.size(), 0);
+		return ;
+	}
+	else if (mess->params.size() == 1 && findClient(mess->params[0]) != NULL)
+	{
+		Client *cl = findClient(mess->params[0]);
+		s = ":42IRC 352 " + c->getNick() + " * " + cl->getUsername() + " " + cl->getHostAddress() + " 42IRC " + cl->getNick() + (isServerOp(cl->getFd()) == true ? " H*" : " H") + " :0 undefined\r\n";
+		send(c->getFd(), s.c_str(), s.size(), 0);
+		s.clear();
+		s = ":42IRC 315 " + c->getNick() + " " + cl->getNick() +" :End of WHO list\r\n";
+		send(c->getFd(), s.c_str(), s.size(), 0);
+		return ;
+	}
+	s = ":42IRC 315 " + c->getNick() + " * :End of WHO list\r\n";
+	send(c->getFd(), s.c_str(), s.size(), 0);
+}
+
+void	Server::infoCmd(Message *mess, Client *c)
+{
+	std::string s = ":42IRC 371 " + c->getNick() + " :Server 42IRC version 1.2, by Michele Paci and Marcello Crisari\r\n";
+	s += "42IRC 374 " + c->getNick() +" :End of INFO list";
+	send(c->getFd(), s.c_str(), s.size(), 0);
+}
+
+void	Server::killCmd(Message *mess, Client *c, fd_set *currentsockets)
+{
+	std::string ss;
+	
+	if(mess->params.size() < 2)
+	{
+		ss = ":42IRC 461 " + c->getNick() + " KILL :Not enough parameters\r\n";
+		send(c->getFd(), ss.c_str(), ss.size(), 0);
+		return;
+	}
+	std::string target = mess->params[0];
+	std::string reason;
+	for (int i = 1; i < mess->params.size(); i++)
+	{
+		if (i + 1 < mess->params.size())
+			reason += mess->params[i] + " ";
+		else
+			reason += mess->params[i];
+	}
+	if (isServerOp(c->getFd()) == false)
+	{
+		ss = ":42IRC 481 " + c->getNick() + " :Permission Denied- You're not an IRC operator\r\n";
+		send(c->getFd(), ss.c_str(), ss.size(), 0);
+		return;
+	}
+	if (c->getHostAddress().compare(target) == 0)
+	{
+		ss = ":42IRC 483 " + c->getNick() + " :You cant kill a server!\r\n";
+		send(c->getFd(), ss.c_str(), ss.size(), 0);
+		return;
+	}
+	if (findClient(target) == NULL)
+	{
+		ss = ":42IRC 401 " + c->getNick() + " " + target + " :No such nick\r\n";
+		send(c->getFd(), ss.c_str(), ss.size(), 0);
+		return;
+	}
+	Client *ctk = findClient(target);
+	ss = ":" + c->getFullIdentifier() + " KILL " + ctk->getNick() +" " + reason + "\r\n";
+	send(ctk->getFd(), ss.c_str(), ss.size(), 0);
+	ss.clear();
+	ss = ":" + ctk->getFullIdentifier() + " QUIT :Closing link: 42IRC KIlled by " + c->getNick() + " " + reason + "\r\n";
+	for (std::vector<std::string>::const_iterator it = ctk->getClientChannel().begin(); it != ctk->getClientChannel().end(); it++)
+	{
+		Channel *ch = findChannel(*it);
+		broadcastToChan(ch, ss, ctk, true);
+		ch->removeClient(ctk->getFd());
+		if (ch->isAnOperator(ctk->getFd()))
+			ch->removeOperator(ctk->getFd());
+		if (!ch->getClients().size())
+			deleteChannel(ch->getName());
+	}
+	ss.clear();
+	ss = ss = ":" + ctk->getFullIdentifier() + " ERROR :Closing link: 42IRC KIlled by " + c->getNick() + " " + reason + "\r\n";
+	send(ctk->getFd(), ss.c_str(), ss.size(), 0);
+	closeClientConnection(ctk->getFd(), currentsockets);
+}
+
+void	Server::kickCmd(Message *mess, Client *c)
+{
+	std::string s;
+	if (mess->params.size() < 2)
+	{
+		s = ":42IRC 461 INVITE :Not enough parameters\r\n";
+		send(c->getFd(), s.c_str(), s.size(), 0);
+		return ;
+	}
+	std::string	chan = mess->params[0];
+	std::string	ut = mess->params[1];
+	std::vector<std::string> user = ft_split((char*)ut.c_str(), ",");
+	if (findChannel(chan) == NULL)
+	{
+		s = ":42IRC 403 " + c->getNick() + " " + chan + "\r\n";
+		send(c->getFd(), s.c_str(), s.size(), 0);
+		return ;
+	}
+	if (c->isOnChannel(chan) == false)
+	{
+		s = ":42IRC 442 "+ chan + " :You're not on that channel\r\n";
+		send(c->getFd(), s.c_str(), s.size(), 0);
+		return ;
+	}
+	std::string	reason;
+	if (mess->params.size() > 2)
+	{
+		for (int i = 2; i < mess->params.size(); i++)
+		{
+			if (i + 1 < mess->params.size())
+				reason += mess->params[i] + " ";
+			else
+				reason += mess->params[i];
+		}
+	}
+	Channel *ch = findChannel(chan);
+	if (ch->isAnOperator(c->getFd()) == false && isServerOp(c->getFd()) == false)
+	{
+		s = ":42IRC 482 " + c->getNick() + " " + ch->getName() + " :You're not an operator\r\n";
+		send(c->getFd(), s.c_str(), s.size(), 0);
+		return ;
+	}
+
+	for (std::vector<std::string>::iterator it = user.begin(); it != user.end(); it++)
+	{
+		Client *ctk = findClient(*it);
+		if (ctk != NULL && ctk->isOnChannel(chan) == true)
+		{
+			s = ":" + c->getFullIdentifier() + " KICK " + chan + " " + *it + " " + (reason.size() > 0 ? reason : ":We don't like you") + "\r\n";
+			broadcastToChan(ch, s, c, false);
+			ctk->removeChannel(chan);
+			ch->removeClient(ctk->getFd());
+			if (ch->isAnOperator(ctk->getFd()))
+				ch->removeOperator(ctk->getFd());
+		}
+		else
+		{
+			s = ":42IRC 441 " + c->getNick() + " " + ctk->getNick() + " " + ch->getName() + " :They aren't on that channel\r\n";
+			send(c->getFd(), s.c_str(), s.size(), 0);
+		}
+	}
+}
+
 void	Server::inviteCmd(Message *mess, Client *c)
 {
 	std::string s;
@@ -63,7 +240,6 @@ void	Server::modeCmd(Message *mess, Client *c)
 	std::string s;
 	std::string target = mess->params[0];
 
-
 	//check if target exist
 	if (target[0] == '#' && channelExist(target) == false)
 	{
@@ -110,9 +286,9 @@ void	Server::modeCmd(Message *mess, Client *c)
 			for (int i = 2; i < mess->params.size(); i++)
 				modeParams.push_back(mess->params[i]);
 
+			int	paramsIt = 0;
 			for (int i = 0; i < modeToAdd.size(); i++)
 			{
-				int	paramsIt = 0;
 				if (ch->isAnOperator(c->getFd()) == true || isServerOp(c->getFd()) == true)
 					switchMode(modeToAdd[i], sign, modeParams, &paramsIt, ch, c);
 				else
@@ -160,9 +336,9 @@ void	Server::switchMode(char m, std::string sign, std::vector<std::string> mp, i
 			if (*pi < mp.size())
 			{
 				Client *cto = findClient(mp[*pi]);
-				if (cto->isOnChannel(ch->getName()) == false)
+				if (cto == NULL || cto->isOnChannel(ch->getName()) == false)
 				{
-					s = ":42IRC 441 " + c->getNick() + " " + cto->getNick() + " " + ch->getName() + " :They aren't on that channel\r\n";
+					s = ":42IRC 441 " + c->getNick() + " " + mp[*pi] + " " + ch->getName() + " :They aren't on that channel\r\n";
 					send(c->getFd(), s.c_str(), s.size(), 0);
 					*pi += 1;
 					return;
@@ -186,14 +362,14 @@ void	Server::switchMode(char m, std::string sign, std::vector<std::string> mp, i
 			{
 				Client *cto = findClient(mp[*pi]);
 
-				if (cto->isOnChannel(ch->getName()) == false)
+				if (cto == NULL || cto->isOnChannel(ch->getName()) == false)
 				{
-					s = ":42IRC 441 " + c->getNick() + " " + cto->getNick() + " " + ch->getName() + " :They aren't on that channel\r\n";
+					s = ":42IRC 441 " + c->getNick() + " " + mp[*pi] + " " + ch->getName() + " :They aren't on that channel\r\n";
 					send(c->getFd(), s.c_str(), s.size(), 0);
 					*pi += 1;
 					return;
 				}
-				if (cto != NULL)
+				else if (cto != NULL)
 				{
 					!sign.compare("+") ? ch->setNewOperator(cto->getFd()) : ch->removeOperator(cto->getFd());
 					s = ":" + c->getFullIdentifier() + " MODE " + ch->getName() + " :" + sign + m + " " + cto->getNick() +"\r\n";
@@ -208,10 +384,25 @@ void	Server::switchMode(char m, std::string sign, std::vector<std::string> mp, i
 			break ;
 
 		case 'k' :
-			ch->setKey((*pi < mp.size() && sign.compare("+"))  ? mp[*pi++] : "");
-			ch->setModes(sign + m);
-			s = ":" + c->getFullIdentifier() + " MODE " + ch->getName() + " :" + sign + m + "\r\n";
-			broadcastToChan(ch, s, c, false);
+			if (*pi < mp.size() && !sign.compare("+"))
+			{
+				ch->setKey(mp[*pi]);
+				*pi += 1;
+				ch->setModes(sign + m);
+				s = ":" + c->getFullIdentifier() + " MODE " + ch->getName() + " :" + sign + m + " " + mp[*pi] + "\r\n";
+				broadcastToChan(ch, s, c, false);
+			}
+			else if (!sign.compare("-"))
+			{
+				ch->setKey("");
+				ch->setModes(sign + m);
+				s = ":" + c->getFullIdentifier() + " MODE " + ch->getName() + " :" + sign + m + "\r\n";
+				broadcastToChan(ch, s, c, false);
+			}
+			else
+			{
+				s = ":42IRC 461 MODE :Not enough parameters\r\n"; send(c->getFd(), s.c_str(), s.size(), 0);
+			}
 			break ;
 
 		case 'b':
@@ -498,6 +689,47 @@ void	Server::partCmd(Message *mess, Client *c)
 		}
 	}
 
+}
+
+void	Server::noticeCmd(Message *mess, Client *c)
+{
+	std::string ut = mess->params[0];
+	std::vector<std::string> target = ft_split((char*)ut.c_str(), ",");
+	std::string msg = ReplyCreator(mess, c, 1);
+
+	for (int i = 0; i < target.size(); i++)
+	{
+		if (target[i][0] != '#') //nick
+		{
+			std::string s;
+			for (int j = 0; j < _cVec.size(); j++)
+			{
+				if (!_cVec[j]->getNick().compare(target[i]))
+				{
+					s = ":" + c->getFullIdentifier() + " NOTICE " + target[i] + " " + msg;
+					send(_cVec[j]->getFd(), s.c_str(), s.size(), 0);
+					break;
+				}
+			}
+		}
+		else //channel
+		{
+			std::string s;
+			for (int j = 0; j < _chV.size(); j++)
+			{
+				if (!_chV[j]->getName().compare(target[i]) && ((c->isOnChannel(target[i]) == true || !_chV[i]->isMode('n')) && _chV[i]->isBanned(c->getFullIdentifier()) == false && (_chV[i]->canITalk(c->getFd()) == true || _chV[i]->isMode('m') == false)))
+				{
+					s = ":" + c->getFullIdentifier() + " NOTICE " + target[i] + " " + msg;
+					for (std::vector<int>::const_iterator it = _chV[j]->getClients().begin(); it != _chV[j]->getClients().end(); it++)
+					{
+						if (*it != c->getFd())
+							send(*it, s.c_str(), s.size(), 0);
+					}
+					break;
+				}
+			}
+		}
+	}
 }
 
 void	Server::privmsgCmd(Message *mess, Client *c)

@@ -5,6 +5,7 @@
 #include <iostream>
 #include <sstream>
 #include <vector>
+#include <algorithm>
 
 class Client 
 {
@@ -92,6 +93,19 @@ class Client
         void    setIsRegistered( bool k ) { _isRegistered = k; }
         void    setNewClientChannel(std::string ch) { _ch.push_back(ch); }
         void    addPersonalBuff(std::string str) { personalBuff += str; }
+
+        
+
+        bool const   haveChannelInCommon(Client *c) const
+        {
+            for (std::vector<std::string>::const_iterator it = _ch.begin(); it != _ch.end(); it++)
+            {
+                std::vector<std::string>::const_iterator i = std::find(c->getClientChannel().begin(), c->getClientChannel().end(), *it);
+                if (it != c->getClientChannel().end())
+                    return true;
+            }
+            return false;
+        }
 
 
     private :

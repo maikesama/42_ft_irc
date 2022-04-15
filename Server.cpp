@@ -143,6 +143,14 @@ void	Server::MessageHandler(Message *mess, Client *c, fd_set *currentsockets)
 		Replyer(INVITE, c, mess, currentsockets);
 	else if(!mess->command.compare("KICK"))
 		Replyer(KICK, c, mess, currentsockets);
+	else if(!mess->command.compare("NOTICE"))
+		Replyer(NOTICE, c, mess, currentsockets);
+	else if(!mess->command.compare("KILL") || !mess->command.compare("kill"))
+		Replyer(KILL, c, mess, currentsockets);
+	else if(!mess->command.compare("INFO"))
+		Replyer(INFO, c, mess, currentsockets);
+	else if(!mess->command.compare("WHO"))
+		Replyer(WHO, c, mess, currentsockets);
 }
 
 void	Server::Replyer(int cmd, Client *c, Message *mess, fd_set *currentsockets)
@@ -175,70 +183,24 @@ void	Server::Replyer(int cmd, Client *c, Message *mess, fd_set *currentsockets)
 
 		case KICK : kickCmd(mess, c); break;
 
+		case NOTICE : noticeCmd(mess, c); break;
+
+		case KILL : killCmd(mess, c, currentsockets); break;
+
+		case INFO : infoCmd(mess, c); break;
+
+		case WHO : whoCmd(mess, c); break;
+
 		default : break;
 	}
 }
 
-void	Server::kickCmd(Message *mess, Client *c)
+void	Server::broadcastToChan(Channel *ch, std::string msg, Client *c, bool excludeMe)
 {
-	std::string s;
-	if (mess->params.size() < 2)
+	for (std::vector<int>::const_iterator it = ch->getClients().begin(); it != ch->getClients().end(); it++)
 	{
-		s = ":42IRC 461 INVITE :Not enough parameters\r\n";
-		send(c->getFd(), s.c_str(), s.size(), 0);
-		return ;
-	}
-	std::string	chan = mess->params[0];
-	std::string	ut = mess->params[1];
-	std::vector<std::string> user = ft_split((char*)ut.c_str(), ",");
-	if (findChannel(chan) == NULL)
-	{
-		s = ":42IRC 403 " + c->getNick() + " " + chan + "\r\n";
-		send(c->getFd(), s.c_str(), s.size(), 0);
-		return ;
-	}
-	if (c->isOnChannel(chan) == false)
-	{
-		s = ":42IRC 442 "+ chan + " :You're not on that channel\r\n";
-		send(c->getFd(), s.c_str(), s.size(), 0);
-		return ;
-	}
-	std::string	reason;
-	if (mess->params.size() > 2)
-	{
-		for (int i = 2; i < mess->params.size(); i++)
-		{
-			if (i + 1 < mess->params.size())
-				reason += mess->params[i] + " ";
-			else
-				reason += mess->params[i];
-		}
-	}
-	Channel *ch = findChannel(chan);
-	if (ch->isAnOperator(c->getFd()) == false && isServerOp(c->getFd()) == false)
-	{
-		s = ":42IRC 482 " + c->getNick() + " " + ch->getName() + " :You're not an operator\r\n";
-		send(c->getFd(), s.c_str(), s.size(), 0);
-		return ;
-	}
-
-	for (std::vector<std::string>::iterator it = user.begin(); it != user.end(); it++)
-	{
-		Client *ctk = findClient(*it);
-		if (ctk != NULL && ctk->isOnChannel(chan) == true)
-		{
-			s = ":" + c->getFullIdentifier() + " KICK " + chan + " " + *it + " " + (reason.size() > 0 ? reason : ":We don't like you") + "\r\n";
-			broadcastToChan(ch, s, c, false);
-			ctk->removeChannel(chan);
-			ch->removeClient(ctk->getFd());
-			if (ch->isAnOperator(ctk->getFd()))
-				ch->removeOperator(ctk->getFd());
-		}
-		else
-		{
-			s = ":42IRC 441 " + c->getNick() + " " + ctk->getNick() + " " + ch->getName() + " :They aren't on that channel\r\n";
-			send(c->getFd(), s.c_str(), s.size(), 0);
-		}
+		if (*it != c->getFd() || !excludeMe)
+			send(*it, msg.c_str(), msg.size(), 0);
 	}
 }
 
@@ -376,7 +338,7 @@ void	Server::closeClientConnection(int fd, fd_set *currentsocket)
 		if (_cVec[i]->getFd() == fd)
 		{
 			delete *it;
-			_cVec.erase(it);
+			it = _cVec.erase(it);
 			break;
 		}
 		i++;

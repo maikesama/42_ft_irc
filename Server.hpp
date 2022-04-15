@@ -181,17 +181,14 @@ class Server
 		void	operCmd(Message *mess, Client *c);
 		void	inviteCmd(Message *mess, Client *c);
 		void	kickCmd(Message *mess, Client *c);
+		void	noticeCmd(Message *mess, Client *c);
+		void	killCmd(Message *mess, Client *c, fd_set *currentsockets);
+		void	infoCmd(Message *mess, Client *c);
+		void	whoCmd(Message *mess, Client *c);
 
 
 
-		void	broadcastToChan(Channel *ch, std::string msg, Client *c, bool excludeMe)
-		{
-			for (std::vector<int>::const_iterator it = ch->getClients().begin(); it != ch->getClients().end(); it++)
-			{
-				if (*it != c->getFd() || !excludeMe)
-					send(*it, msg.c_str(), msg.size(), 0);
-			}
-		}
+		void	broadcastToChan(Channel *ch, std::string msg, Client *c, bool excludeMe);
 
 	private :
 		int	port;
