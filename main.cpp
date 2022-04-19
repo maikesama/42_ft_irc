@@ -64,7 +64,6 @@ int	main(int argc, char **argv)
 
 	if (firstcheck(&serv, argv) == 1)
 		exit(1);
-	
 	serv.setCreationTime();
 	serv.launch();
 

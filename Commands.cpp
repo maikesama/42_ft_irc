@@ -186,7 +186,7 @@ void	Server::kickCmd(Message *mess, Client *c)
 		}
 		else
 		{
-			s = ":42IRC 441 " + c->getNick() + " " + ctk->getNick() + " " + ch->getName() + " :They aren't on that channel\r\n";
+			s = ":42IRC 441 " + c->getNick() + " " + *it + " " + ch->getName() + " :They aren't on that channel\r\n";
 			send(c->getFd(), s.c_str(), s.size(), 0);
 		}
 	}

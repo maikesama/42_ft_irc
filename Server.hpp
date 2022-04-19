@@ -18,7 +18,21 @@ class Server
 {
 	public :
 		Server() {};
-		~Server() {};
+		~Server() 
+		{
+			std::cout << "42IRC server : Quitting." << std::endl;
+			for (std::vector<Channel*>::const_iterator it = _chV.begin(); it != _chV.end(); it++)
+			{
+				delete *it;
+				it = _chV.erase(it);
+			}
+
+			for (std::vector<Client*>::iterator it = _cVec.begin(); it != _cVec.end(); it++)
+			{
+				delete *it;
+				it = _cVec.erase(it);
+			}
+		};
 
 		// Getter and setter 
 		void	setPort(const int & pn)
@@ -186,9 +200,8 @@ class Server
 		void	infoCmd(Message *mess, Client *c);
 		void	whoCmd(Message *mess, Client *c);
 
-
-
 		void	broadcastToChan(Channel *ch, std::string msg, Client *c, bool excludeMe);
+
 
 	private :
 		int	port;
@@ -202,5 +215,6 @@ class Server
 		std::string	CreationTime;
 		
 };
+
 
 #endif

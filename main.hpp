@@ -19,6 +19,7 @@
 #include <algorithm>
 #include <iostream>
 #include <cstdlib>
+#include <csignal>
 
 
 const std::vector<std::string> ft_split(char* str, const char *ctos);
