@@ -843,7 +843,7 @@ void	Server::joinCmd(Message *mess, Client *c)
 		if (channelExist(channels[i]) == true)
 		{
 			Channel *ch = findChannel(channels[i]);
-			if ((ch->getKey().size() == 0 || (i < keys.size() && keys[i].compare(ch->getKey()) == 0) || ch->isMode('k') == false) &&  ch->isBanned(c->getFullIdentifier()) == false)
+			if ((ch->getKey().size() == 0 || (i < keys.size() && keys[i].compare(ch->getKey()) == 0) || ch->isMode('k') == false) &&  ch->isBanned(c->getFullIdentifier()) == false && c->isOnChannel(ch->getName()) == false)
 			{
 				std::string s = ":" + c->getFullIdentifier() + " JOIN " + channels[i] + "\r\n";
 				send (c->getFd(), s.c_str(), s.size(), 0);
@@ -854,12 +854,12 @@ void	Server::joinCmd(Message *mess, Client *c)
 				c->setNewClientChannel(channels[i]);
 				sendChannelInformation(c, ch);
 			}
-			else if (ch->isBanned(c->getFullIdentifier()) == true)
+			else if (ch->isBanned(c->getFullIdentifier()) == true && c->isOnChannel(ch->getName()) == false)
 			{
 				std::string s = ":42IRC 474 " + c->getNick() + " " + channels[i] + " :Cannot join channel (+b)\r\n";
 				send(c->getFd(), s.c_str(), s.size(), 0);
 			}
-			else
+			else if (ch->isMode('k') == true && (ch->getKey().size() != 0 || i > keys.size() || keys[i].compare(ch->getKey()) != 0) && c->isOnChannel(ch->getName()) == false)
 			{
 				std::string s = ":42IRC 475 " + c->getNick() + " " + channels[i] + " :Cannot join channel (+k)\r\n";
 				send(c->getFd(), s.c_str(), s.size(), 0);
